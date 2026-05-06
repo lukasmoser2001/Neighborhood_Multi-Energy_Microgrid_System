@@ -16,7 +16,7 @@ print("\nColumn names:")
 print(df.columns.tolist())
 print(f"\nTotal rows: {len(df)}")
 
-# Convert utc_timestamp to datetime if it's not already
+# Convert utc_timestamp to datetime 
 df['utc_timestamp'] = pd.to_datetime(df['utc_timestamp'])
 
 # Filter for June 1, 2015
@@ -45,7 +45,7 @@ print(f"\nTotal records found: {len(result_table)}")
 print("\nData Table:")
 print(result_table.to_string())
 
-# Optional: Save to CSV
+# Save to CSV
 output_filename = f'extracted_when2heat_FR_{target_date.strftime("%d_%m_%Y")}.csv'
 result_table.to_csv(output_filename, index=False)
 print(f"\nData saved to: {output_filename}")
