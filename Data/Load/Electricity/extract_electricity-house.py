@@ -22,8 +22,7 @@ print("\nColumn names:")
 print(df.columns.tolist())
 print(f"\nTotal rows: {len(df)}")
 
-# The first column is the timestamp (unnamed)
-# Rename it to 'Timestamp' for clarity
+# Rename first column to 'Timestamp' for clarity
 df.rename(columns={df.columns[0]: 'Timestamp'}, inplace=True)
 
 # Convert Timestamp to datetime, handling timezone info
