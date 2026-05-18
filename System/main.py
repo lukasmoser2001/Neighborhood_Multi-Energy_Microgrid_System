@@ -33,7 +33,7 @@ SEASON_FILES = [
     ),
 ]
 OUTPUT_FILE = BASE_DIR / "results" / "hourly_results_base.csv"
-ELECTRICITY_COLUMN_NAME = "Mean"
+ELECTRICITY_COLUMN_NAME = "Median"
 THERMAL_SPACE_COLUMN = "FR_heat_demand_space_SFH"
 THERMAL_WATER_COLUMN = "FR_heat_demand_water"
 
@@ -93,14 +93,37 @@ def write_hourly_results(path, rows):
         writer.writerows(rows)
 
 
+def write_annual_results(path, summary):
+    """Write annual result summary to a CSV file."""
+    fieldnames = [
+        "total_electricity_demand_kwh",
+        "total_thermal_demand_kwh",
+        "annual_cost_utility_grid_eur",
+        "annual_cost_gas_boiler_eur",
+        "annual_cost_total_eur",
+        "annual_emissions_utility_grid_kg",
+        "annual_emissions_gas_boiler_kg",
+        "annual_emissions_total_kg",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerow(summary)
+
+
 def main():
     hourly_results = []
     total_electricity_demand = 0.0
     total_thermal_demand = 0.0
 
     for season_name, electricity_path, thermal_path in SEASON_FILES:
-        electricity_demand = read_electricity_demand(electricity_path)
-        thermal_demand = read_thermal_demand(thermal_path)
+        electricity_demand = [
+            demand / 1000.0 for demand in read_electricity_demand(electricity_path)
+        ]
+        thermal_demand = [
+            demand / 1000.0 for demand in read_thermal_demand(thermal_path)
+        ]
 
         for hour_index, (electricity_kwh, thermal_kwh) in enumerate(
             zip(electricity_demand, thermal_demand), start=1
@@ -147,16 +170,23 @@ def main():
 
     write_hourly_results(OUTPUT_FILE, hourly_results)
 
-    print("Scenario 1 summary:")
-    print(f"  seasons processed: {len(SEASON_FILES)}")
-    print(f"  rows written: {len(hourly_results)}")
-    print(f"  annual cost utility grid (EUR): {annual_cost_ug:.2f}")
-    print(f"  annual cost gas boiler (EUR): {annual_cost_gb:.2f}")
-    print(f"  annual total cost (EUR): {annual_cost_total:.2f}")
-    print(f"  annual emissions utility grid (kg CO2e): {annual_emissions_ug:.2f}")
-    print(f"  annual emissions gas boiler (kg CO2e): {annual_emissions_gb:.2f}")
-    print(f"  annual total emissions (kg CO2e): {annual_emissions_total:.2f}")
+    annual_output_file = BASE_DIR / "results" / "annual_results_base.csv"
+    write_annual_results(
+        annual_output_file,
+        {
+            "total_electricity_demand_kwh": round(total_electricity_demand, 4),
+            "total_thermal_demand_kwh": round(total_thermal_demand, 4),
+            "annual_cost_utility_grid_eur": round(annual_cost_ug, 4),
+            "annual_cost_gas_boiler_eur": round(annual_cost_gb, 4),
+            "annual_cost_total_eur": round(annual_cost_total, 4),
+            "annual_emissions_utility_grid_kg": round(annual_emissions_ug, 4),
+            "annual_emissions_gas_boiler_kg": round(annual_emissions_gb, 4),
+            "annual_emissions_total_kg": round(annual_emissions_total, 4),
+        },
+    )
+
     print(f"  hourly results written to: {OUTPUT_FILE}")
+    print(f"  annual results written to: {annual_output_file}")
 
 
 if __name__ == "__main__":
