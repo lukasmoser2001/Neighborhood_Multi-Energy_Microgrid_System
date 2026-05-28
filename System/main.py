@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 import csv
 
@@ -5,37 +6,62 @@ import csv
 ELECTRICITY_PRICE_EUR_PER_KWH = 0.1793
 GAS_BOILER_LCOH_EUR_PER_KWH = 0.13
 GAS_BOILER_EMISSION_FACTOR_KG_PER_KWH = 0.02
-UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH = 0.052
+UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH = 0.020
 ANNUALIZATION_FACTOR = 91.25  # 4 * 91.25 = 365 days
+
+# PV system parameters
+I_STC = 1000.0  # W/m²
+T_STC = 25.0  # °C
+I_REF = 800.0  # W/m²
+T_REF = 20.0  # °C
+T_NOM = 44.0  # °C
+BETA = 0.0024  # 0.24 %/°C
+P_PV_RHO = 200.0  # W/m², typical PV peak power density
+A_PVP = 2.08  # m² per panel
+N_PV_H = 8  # panels per household
+P_PV_PEAK_W = P_PV_RHO * A_PVP * N_PV_H
+C_CAP_PV_P = 15.74  # € / panel / a
+C_CAP_PV_ANNUAL = C_CAP_PV_P * N_PV_H
+PV_OM_COST_PER_KWH = 0.01  # €/kWh
 
 # File paths and column names
 BASE_DIR = Path(__file__).resolve().parent.parent
+SOLAR_PROFILE_PATH = (
+    BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv"
+)
 SEASON_FILES = [
     (
         "Winter",
         BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_01_2023.csv",
         BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_01_2015.csv",
+        "2023-01-15",
     ),
     (
         "Spring",
         BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_04_2023.csv",
         BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_04_2015.csv",
+        "2023-04-15",
     ),
     (
         "Summer",
         BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_07_2023.csv",
         BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_07_2015.csv",
+        "2023-07-15",
     ),
     (
         "Autumn",
         BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_25_10_2022.csv",
         BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_10_2015.csv",
+        "2023-10-15",
     ),
 ]
 OUTPUT_FILE = BASE_DIR / "results" / "hourly_results_base.csv"
 ELECTRICITY_COLUMN_NAME = "Median"
 THERMAL_SPACE_COLUMN = "FR_heat_demand_space_SFH"
 THERMAL_WATER_COLUMN = "FR_heat_demand_water"
+SOLAR_TIMESTAMP_COLUMN = "timestamp"
+SOLAR_IRRADIANCE_COLUMN = "I(t)"
+SOLAR_AMBIENT_TEMP_COLUMN = "Tamb"
 
 # Output CSV columns
 RESULT_FIELDS = [
@@ -43,9 +69,12 @@ RESULT_FIELDS = [
     "hour",
     "electricity_demand_kwh",
     "thermal_demand_kwh",
+    "pv_generation_kwh",
+    "pv_curtailment_kwh",
     "utility_grid_supply_kwh",
     "gas_boiler_heat_kwh",
     "cost_utility_grid_eur",
+    "cost_pv_om_eur",
     "cost_gas_boiler_eur",
     "emissions_utility_grid_kg",
     "emissions_gas_boiler_kg",
@@ -84,6 +113,41 @@ def read_thermal_demand(path):
     return values
 
 
+def read_solar_profile(path, date_str):
+    """Read hourly irradiance and ambient temperature for a sample day."""
+    values = []
+    target_date = datetime.fromisoformat(date_str).date()
+    with path.open(newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            timestamp = row[SOLAR_TIMESTAMP_COLUMN]
+            if timestamp is None:
+                continue
+            try:
+                dt = datetime.fromisoformat(timestamp)
+            except ValueError:
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if dt.date() == target_date:
+                irradiance = parse_float(row[SOLAR_IRRADIANCE_COLUMN])
+                ambient_temp = parse_float(row[SOLAR_AMBIENT_TEMP_COLUMN])
+                values.append((dt, irradiance, ambient_temp))
+    if not values:
+        raise ValueError(f"Solar profile not found for date {date_str} in {path}")
+    values.sort(key=lambda item: item[0])
+    if len(values) != 24:
+        raise ValueError(
+            f"Expected 24 solar profile hours for {date_str}, got {len(values)}"
+        )
+    return [(irradiance, ambient_temp) for _, irradiance, ambient_temp in values]
+
+
+def compute_pv_generation_kwh(irradiance, ambient_temp):
+    """Compute hourly PV generation in kWh using module temperature correction."""
+    t_pv = ambient_temp + (T_NOM - T_REF) * (irradiance / I_REF)
+    p_pv_w = P_PV_PEAK_W * (irradiance / I_STC) * (1 - BETA * (t_pv - T_STC))
+    return max(p_pv_w, 0.0) / 1000.0
+
+
 def write_hourly_results(path, rows):
     """Write hourly result rows to a CSV file."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +162,11 @@ def write_annual_results(path, summary):
     fieldnames = [
         "total_electricity_demand_kwh",
         "total_thermal_demand_kwh",
+        "annual_pv_generation_kwh",
+        "annual_pv_curtailment_kwh",
         "annual_cost_utility_grid_eur",
+        "annual_cost_pv_om_eur",
+        "annual_cost_pv_capital_eur",
         "annual_cost_gas_boiler_eur",
         "annual_cost_total_eur",
         "annual_emissions_utility_grid_kg",
@@ -116,32 +184,47 @@ def main():
     hourly_results = []
     total_electricity_demand = 0.0
     total_thermal_demand = 0.0
+    total_pv_generation = 0.0
+    total_pv_curtailment = 0.0
+    total_grid_supply = 0.0
 
-    for season_name, electricity_path, thermal_path in SEASON_FILES:
+    for season_name, electricity_path, thermal_path, solar_date in SEASON_FILES:
         electricity_demand = [
             demand / 1000.0 for demand in read_electricity_demand(electricity_path)
         ]
         thermal_demand = [
             demand / 1000.0 for demand in read_thermal_demand(thermal_path)
         ]
+        solar_profile = read_solar_profile(SOLAR_PROFILE_PATH, solar_date)
 
-        for hour_index, (electricity_kwh, thermal_kwh) in enumerate(
-            zip(electricity_demand, thermal_demand), start=1
+        if len(solar_profile) != len(electricity_demand):
+            raise ValueError(
+                f"Mismatch between electricity demand ({len(electricity_demand)}) and solar profile ({len(solar_profile)}) for {season_name}"
+            )
+
+        for hour_index, (electricity_kwh, thermal_kwh), (irradiance, ambient_temp) in enumerate(
+            zip(electricity_demand, thermal_demand, solar_profile), start=1
         ):
-            utility_grid_supply_kwh = electricity_kwh
+            pv_generation_kwh = compute_pv_generation_kwh(irradiance, ambient_temp)
+            utility_grid_supply_kwh = max(electricity_kwh - pv_generation_kwh, 0.0)
+            pv_curtailment_kwh = max(pv_generation_kwh - electricity_kwh, 0.0)
             gas_boiler_heat_kwh = thermal_kwh
 
             cost_utility_grid_eur = utility_grid_supply_kwh * ELECTRICITY_PRICE_EUR_PER_KWH
+            cost_pv_om_eur = pv_generation_kwh * PV_OM_COST_PER_KWH
             cost_gas_boiler_eur = gas_boiler_heat_kwh * GAS_BOILER_LCOH_EUR_PER_KWH
 
             emissions_utility_grid_kg = utility_grid_supply_kwh * UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH
             emissions_gas_boiler_kg = gas_boiler_heat_kwh * GAS_BOILER_EMISSION_FACTOR_KG_PER_KWH
 
-            total_cost_hour_eur = cost_utility_grid_eur + cost_gas_boiler_eur
+            total_cost_hour_eur = cost_utility_grid_eur + cost_pv_om_eur + cost_gas_boiler_eur
             total_emissions_hour_kg = emissions_utility_grid_kg + emissions_gas_boiler_kg
 
             total_electricity_demand += electricity_kwh
             total_thermal_demand += thermal_kwh
+            total_pv_generation += pv_generation_kwh
+            total_pv_curtailment += pv_curtailment_kwh
+            total_grid_supply += utility_grid_supply_kwh
 
             hourly_results.append(
                 {
@@ -149,9 +232,12 @@ def main():
                     "hour": hour_index,
                     "electricity_demand_kwh": round(electricity_kwh, 4),
                     "thermal_demand_kwh": round(thermal_kwh, 4),
+                    "pv_generation_kwh": round(pv_generation_kwh, 4),
+                    "pv_curtailment_kwh": round(pv_curtailment_kwh, 4),
                     "utility_grid_supply_kwh": round(utility_grid_supply_kwh, 4),
                     "gas_boiler_heat_kwh": round(gas_boiler_heat_kwh, 4),
                     "cost_utility_grid_eur": round(cost_utility_grid_eur, 4),
+                    "cost_pv_om_eur": round(cost_pv_om_eur, 4),
                     "cost_gas_boiler_eur": round(cost_gas_boiler_eur, 4),
                     "emissions_utility_grid_kg": round(emissions_utility_grid_kg, 4),
                     "emissions_gas_boiler_kg": round(emissions_gas_boiler_kg, 4),
@@ -160,13 +246,17 @@ def main():
                 }
             )
 
-    # Annual calculations are based on summed representative demands multiplied by 91.25
-    annual_cost_ug = total_electricity_demand * ELECTRICITY_PRICE_EUR_PER_KWH * ANNUALIZATION_FACTOR
+    annual_cost_ug = total_grid_supply * ELECTRICITY_PRICE_EUR_PER_KWH * ANNUALIZATION_FACTOR
+    annual_cost_pv_om = total_pv_generation * PV_OM_COST_PER_KWH * ANNUALIZATION_FACTOR
+    annual_cost_pv_capital = C_CAP_PV_ANNUAL
     annual_cost_gb = total_thermal_demand * GAS_BOILER_LCOH_EUR_PER_KWH * ANNUALIZATION_FACTOR
-    annual_emissions_ug = total_electricity_demand * UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH * ANNUALIZATION_FACTOR
+
+    annual_emissions_ug = total_grid_supply * UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH * ANNUALIZATION_FACTOR
     annual_emissions_gb = total_thermal_demand * GAS_BOILER_EMISSION_FACTOR_KG_PER_KWH * ANNUALIZATION_FACTOR
-    annual_cost_total = annual_cost_ug + annual_cost_gb
+    annual_cost_total = annual_cost_ug + annual_cost_pv_om + annual_cost_pv_capital + annual_cost_gb
     annual_emissions_total = annual_emissions_ug + annual_emissions_gb
+    annual_pv_generation = total_pv_generation * ANNUALIZATION_FACTOR
+    annual_pv_curtailment = total_pv_curtailment * ANNUALIZATION_FACTOR
 
     write_hourly_results(OUTPUT_FILE, hourly_results)
 
@@ -176,7 +266,11 @@ def main():
         {
             "total_electricity_demand_kwh": round(total_electricity_demand, 4),
             "total_thermal_demand_kwh": round(total_thermal_demand, 4),
+            "annual_pv_generation_kwh": round(annual_pv_generation, 4),
+            "annual_pv_curtailment_kwh": round(annual_pv_curtailment, 4),
             "annual_cost_utility_grid_eur": round(annual_cost_ug, 4),
+            "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
+            "annual_cost_pv_capital_eur": round(annual_cost_pv_capital, 4),
             "annual_cost_gas_boiler_eur": round(annual_cost_gb, 4),
             "annual_cost_total_eur": round(annual_cost_total, 4),
             "annual_emissions_utility_grid_kg": round(annual_emissions_ug, 4),
