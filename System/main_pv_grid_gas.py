@@ -1,16 +1,12 @@
-"""
-Scenario: PV + utility grid + gas boiler
-Extends base model with photovoltaic system covering electricity demand first,
-with grid covering residual demand and gas boiler providing thermal energy.
-"""
+# Scenario: PV + utility grid + gas boiler
 from pathlib import Path
 import csv
 
-# factors utility grid electricity
+# Utility Grid Parameters
 ELECTRICITY_PRICE_EUR_PER_KWH = 0.1793
 UTILITY_GRID_EMISSION_FACTOR_KG_PER_KWH = 0.020
 
-# factors gas boiler
+# Gas boiler Parameters
 GAS_BOILER_LCOH_EUR_PER_KWH = 0.13
 GAS_BOILER_EMISSION_FACTOR_KG_PER_KWH = 0.02
 
@@ -22,9 +18,9 @@ T_REF = 20.0            # °C, reference ambient temperature
 T_NOM = 44.0            # °C, Nominal Module Operating Temperature (NOCT)
 BETA = 0.0024           # per °C, temperature coefficient (0.24 %/°C → 0.0024 /°C)
 A_PVP = 2.08            # m², area per panel
-N_PVH = 8               # number of panels per household
-P_PV_RHO = 224         # dimensionless, panel efficiency at STC
-C_CAP_PVP = 15.74       # €/year, annualized capital cost per panel
+N_PVH = 2               # number of panels per household
+P_PV_RHO = 224          # W/m², Power density PV panel
+C_CAP_PVP = 15.74       # €/year, annualized capital cost per panel including interest 
 C_OM_PV = 0.01          # €/kWh, operation & maintenance cost per kWh generated
 
 # Derived PV constants
@@ -61,7 +57,7 @@ SEASON_FILES = [
 # Solar irradiation data file (single file for all seasons)
 SOLAR_DATA_FILE = BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv"
 
-OUTPUT_FILE = BASE_DIR / "results" / "hourly_results_pv_grid_gas.csv"
+OUTPUT_FILE = BASE_DIR / "Results" / "hourly_results_pv_grid_gas.csv"
 ELECTRICITY_COLUMN_NAME = "Median"
 THERMAL_SPACE_COLUMN = "FR_heat_demand_space_SFH"
 THERMAL_WATER_COLUMN = "FR_heat_demand_water"
@@ -88,21 +84,14 @@ RESULT_FIELDS = [
 
 
 def parse_float(value: str) -> float:
-    """Convert a CSV string to float, handling common decimal formats."""
+    # Convert CSV text values to float and accept commas as decimals.
     if value is None:
         return 0.0
     return float(value.replace(",", "."))
 
 
 def read_electricity_demand(path: Path) -> list[float]:
-    """Read hourly electricity demand from the CSV file.
-    
-    Args:
-        path: Path to CSV file with electricity demand data.
-        
-    Returns:
-        List of hourly electricity demand values (Wh).
-    """
+    # Read hourly electricity demand from CSV.
     values = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
@@ -113,14 +102,7 @@ def read_electricity_demand(path: Path) -> list[float]:
 
 
 def read_thermal_demand(path: Path) -> list[float]:
-    """Read hourly thermal demand and compute total heat demand.
-    
-    Args:
-        path: Path to CSV file with thermal demand data.
-        
-    Returns:
-        List of hourly thermal demand values (Wh), summing space and water heating.
-    """
+    # Read hourly thermal demand and sum space and water heating.
     values = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
@@ -132,38 +114,32 @@ def read_thermal_demand(path: Path) -> list[float]:
 
 
 def read_solar_data(path: Path) -> list[tuple[float, float]]:
-    """Read hourly solar irradiance and ambient temperature data. """
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Solar irradiance data file not found: {path}\n"
-            "Expected columns: 'I(t)' (W/m²), 'Tamb' (°C)"
-        )
-    
+    # Read hourly solar irradiance and ambient temperature data.
     values = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            irradiance = parse_float(row["I(t)"])
-            T_amb = parse_float(row["Tamb"])
+            irradiance = parse_float(row["I(t)_Wm2"])
+            T_amb = parse_float(row["Tamb_C"])
             values.append((irradiance, T_amb))
     return values
 
 
 def calc_pv_temperature(T_amb: float, irradiance: float) -> float:
-    """Calculate PV cell operating temperature."""
+    # Compute PV cell temperature from ambient temperature and irradiance.
     return T_amb + (T_NOM - T_REF) * (irradiance / I_REF)
 
 
 def calc_pv_output_kwh(irradiance: float, T_amb: float) -> float:
-    """Calculate hourly PV power output with temperature derating."""
+    # Compute PV output in kWh for one hour with temperature derating.
     T_pv = calc_pv_temperature(T_amb, irradiance)
     P_pv_w = P_PV_PEAK * 1000 * (irradiance / I_STC) * (1.0 - BETA * (T_pv - T_STC))
-    P_pv_w = max(0.0, P_pv_w)  # Clamp to zero
-    return P_pv_w / 1000.0  # Convert W to kWh (assuming 1-hour interval)
+    P_pv_w = max(0.0, P_pv_w)
+    return P_pv_w / 1000.0
 
 
 def write_hourly_results(path: Path, rows: list[dict]) -> None:
-    """Write hourly result rows to a CSV file."""
+    # Write hourly results to a CSV file.
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=RESULT_FIELDS)
@@ -172,12 +148,7 @@ def write_hourly_results(path: Path, rows: list[dict]) -> None:
 
 
 def write_annual_results(path: Path, summary: dict) -> None:
-    """Write annual result summary to a CSV file.
-    
-    Args:
-        path: Output CSV file path.
-        summary: Dictionary with annual aggregate metrics.
-    """
+    # Write annual summary results to a CSV file.
     fieldnames = [
         "total_electricity_demand_kwh",
         "total_thermal_demand_kwh",
@@ -201,7 +172,7 @@ def write_annual_results(path: Path, summary: dict) -> None:
 
 
 def main() -> None:
-    """Main execution: read data, compute hourly results, write outputs."""
+    # Read data, compute hourly results, and write outputs.
     hourly_results = []
     total_electricity_demand = 0.0
     total_thermal_demand = 0.0
@@ -258,14 +229,15 @@ def main() -> None:
             pv_curtailed_kwh = max(0.0, pv_output_kwh - electricity_kwh)
             pv_used_kwh = pv_output_kwh - pv_curtailed_kwh
 
-            # Gas boiler covers all thermal demand
+            # Gas boiler covers all thermal demand for now
             gas_boiler_heat_kwh = thermal_kwh
 
             # Costs
+            cost_pv_capex_hour_eur = C_CAP_TOTAL / (365.0 * 24.0)  # Annualized, hourly allocation; will change later to different approach
             cost_pv_om_eur = pv_output_kwh * C_OM_PV
             cost_grid_eur = grid_supply_kwh * ELECTRICITY_PRICE_EUR_PER_KWH
             cost_gas_boiler_eur = gas_boiler_heat_kwh * GAS_BOILER_LCOH_EUR_PER_KWH
-            cost_pv_capex_hour_eur = C_CAP_TOTAL / (365.0 * 24.0)  # Annualized, hourly allocation
+        
 
             total_cost_hour_eur = (
                 cost_pv_capex_hour_eur
@@ -337,7 +309,7 @@ def main() -> None:
     annual_emissions_gas_boiler = total_emissions_gas_boiler * ANNUALIZATION_FACTOR
     annual_emissions_total = annual_emissions_grid + annual_emissions_gas_boiler
 
-    annual_output_file = BASE_DIR / "results" / "annual_results_pv_grid_gas.csv"
+    annual_output_file = BASE_DIR / "Results" / "annual_results_pv_grid_gas.csv"
     write_annual_results(
         annual_output_file,
         {
@@ -359,7 +331,5 @@ def main() -> None:
 
     print(f"  hourly results written to: {OUTPUT_FILE}")
     print(f"  annual results written to: {annual_output_file}")
-
-
 if __name__ == "__main__":
     main()
