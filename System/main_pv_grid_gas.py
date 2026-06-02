@@ -18,7 +18,7 @@ T_REF = 20.0            # °C, reference ambient temperature
 T_NOM = 44.0            # °C, Nominal Module Operating Temperature (NOCT)
 BETA = 0.0024           # per °C, temperature coefficient (0.24 %/°C → 0.0024 /°C)
 A_PVP = 2.08            # m², area per panel
-N_PVH = 2               # number of panels per household
+N_PVH = 8               # number of panels per household (6 panels equals about 2820 Wp)
 P_PV_RHO = 224          # W/m², Power density PV panel
 C_CAP_PVP = 15.74       # €/year, annualized capital cost per panel including interest 
 C_OM_PV = 0.01          # €/kWh, operation & maintenance cost per kWh generated
@@ -224,11 +224,15 @@ def main() -> None:
             pv_output_kwh = calc_pv_output_kwh(irradiance, T_amb)
             pv_cell_temp_c = calc_pv_temperature(T_amb, irradiance)
 
+
+            # Electricity Energy balance
             # Dispatch: PV covers demand first, grid covers residual
             grid_supply_kwh = max(0.0, electricity_kwh - pv_output_kwh)
             pv_curtailed_kwh = max(0.0, pv_output_kwh - electricity_kwh)
             pv_used_kwh = pv_output_kwh - pv_curtailed_kwh
 
+
+            # Thermal Energy balance
             # Gas boiler covers all thermal demand for now
             gas_boiler_heat_kwh = thermal_kwh
 
@@ -288,6 +292,8 @@ def main() -> None:
     write_hourly_results(OUTPUT_FILE, hourly_results)
 
     # Calculate annual aggregates
+    annual_electricity_demand = total_electricity_demand * ANNUALIZATION_FACTOR
+    annual_thermal_demand = total_thermal_demand * ANNUALIZATION_FACTOR
     annual_pv_generation = total_pv_generation * ANNUALIZATION_FACTOR
     annual_pv_curtailed = total_pv_curtailed * ANNUALIZATION_FACTOR
     pv_self_consumption_fraction = (
@@ -313,8 +319,8 @@ def main() -> None:
     write_annual_results(
         annual_output_file,
         {
-            "total_electricity_demand_kwh": round(total_electricity_demand, 4),
-            "total_thermal_demand_kwh": round(total_thermal_demand, 4),
+            "total_electricity_demand_kwh": round(annual_electricity_demand, 4),
+            "total_thermal_demand_kwh": round(annual_thermal_demand, 4),
             "total_pv_generation_kwh": round(annual_pv_generation, 4),
             "total_pv_curtailed_kwh": round(annual_pv_curtailed, 4),
             "pv_self_consumption_fraction": round(pv_self_consumption_fraction, 4),
