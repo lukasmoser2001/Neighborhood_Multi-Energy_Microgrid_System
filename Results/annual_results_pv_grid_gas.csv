@@ -1,2 +1,2 @@
 total_electricity_demand_kwh,total_thermal_demand_kwh,total_pv_generation_kwh,total_pv_curtailed_kwh,pv_self_consumption_fraction,annual_cost_pv_capex_eur,annual_cost_pv_om_eur,annual_cost_grid_eur,annual_cost_gas_boiler_eur,annual_cost_total_eur,annual_emissions_grid_kg,annual_emissions_gas_boiler_kg,annual_emissions_total_kg
-1992.0787,180894.8213,5133.2167,4207.8048,0.1803,125.92,51.3322,191.2534,23516.3268,23884.8323,21.3333,3617.8964,3639.2298
+1992.0787,180894.8213,1283.3042,613.2167,0.5222,31.48,12.833,237.033,23516.3268,23797.6728,26.4398,3617.8964,3644.3363

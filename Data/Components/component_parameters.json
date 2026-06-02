@@ -1,0 +1,35 @@
+{
+  "annualization": {
+    "factor": 91.25
+  },
+  "utility_grid": {
+    "enabled": true,
+    "electricity_price_eur_per_kwh": 0.1793,
+    "emission_factor_kg_per_kwh": 0.020
+  },
+  "pv_system": {
+    "enabled": true,
+    "i_stc_w_m2": 1000.0,
+    "t_stc_c": 25.0,
+    "i_ref_w_m2": 800.0,
+    "t_ref_c": 20.0,
+    "t_nom_c": 44.0,
+    "beta_per_c": 0.0024,
+    "panel_area_m2": 2.08,
+    "panels_per_household": 6,
+    "power_density_w_m2": 224,
+    "annualized_capital_cost_per_panel_eur": 15.74,
+    "o_and_m_cost_per_kwh_eur": 0.01
+  },
+  "gas_boiler": {
+    "enabled": true,
+    "lcoh_eur_per_kwh": 0.13,
+    "emission_factor_kg_per_kwh": 0.02
+  },
+  "electric_boiler": {
+    "enabled": false,
+    "efficiency": 0.95,
+    "lcoh_eur_per_kwh": 0.15,
+    "emission_factor_kg_per_kwh": 0.0
+  }
+}
