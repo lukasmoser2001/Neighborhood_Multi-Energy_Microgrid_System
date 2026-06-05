@@ -384,8 +384,8 @@ def main() -> None:
 
 
 # Output file and column definitions
-OUTPUT_FILE = BASE_DIR / "Results" / "hourly_results_pv_grid_gas.csv"
-ANNUAL_OUTPUT_FILE = BASE_DIR / "Results" / "annual_results_pv_grid_gas.csv"
+OUTPUT_FILE = BASE_DIR / "Results" / "hourly_results.csv"
+ANNUAL_OUTPUT_FILE = BASE_DIR / "Results" / "annual_results.csv"
 
 RESULT_FIELDS = [
     "season",
