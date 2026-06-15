@@ -5,10 +5,11 @@
   "utility_grid": {
     "enabled": true,
     "electricity_price_eur_per_kwh": 0.1793,
+    "sell_price_eur_per_kwh": 0.08345,
     "emission_factor_kg_per_kwh": 0.020
   },
   "pv_system": {
-    "enabled": false,
+    "enabled": true,
     "i_stc_w_m2": 1000.0,
     "t_stc_c": 25.0,
     "i_ref_w_m2": 800.0,
@@ -28,8 +29,24 @@
   },
   "electric_boiler": {
     "enabled": false,
-    "efficiency": 0.95,
+    "efficiency": 0.99,
     "lcoh_eur_per_kwh": 0.15,
     "emission_factor_kg_per_kwh": 0.0
+  },
+  "BESS": {
+    "enabled": true,
+    "sigma_BES": 0.0003,
+    "eta_BES_char": 0.945,
+    "eta_BES_disc": 0.945,
+    "SOC_BES_init": 0.5,
+    "SOC_BES_min": 0.0,
+    "SOC_BES_max": 1.0,
+    "E_BES_cap": 3.28,
+    "P_BES_max": 3456,
+    "LCOS": 0.456,
+    "LEOS": 83.5,
+    "CO2eq_BES": 273.88,
+    "lifetime_BES": 10,
+    "CO2eq_BES_annual": 27.388
   }
 }

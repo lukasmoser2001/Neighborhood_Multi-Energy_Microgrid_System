@@ -22,10 +22,14 @@ class UtilityGrid:
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("utility_grid", {})
         self.enabled = cfg.get("enabled", True)
         self.electricity_price_eur_per_kwh = cfg.get("electricity_price_eur_per_kwh", 0.0)
+        self.sell_price_eur_per_kwh = cfg.get("sell_price_eur_per_kwh", 0.0)
         self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
 
     def get_cost_eur(self, electricity_kwh: float) -> float:
         return electricity_kwh * self.electricity_price_eur_per_kwh
+
+    def get_revenue_eur(self, export_kwh: float) -> float:
+        return export_kwh * self.sell_price_eur_per_kwh
 
     def get_emissions_kg(self, electricity_kwh: float) -> float:
         return electricity_kwh * self.emission_factor_kg_per_kwh
@@ -116,4 +120,60 @@ class ElectricBoiler:
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.emission_factor_kg_per_kwh
+
+
+# Battery energy storage system component
+# Parameters (in component_parameters.json -> "BESS"):
+# - sigma_BES: self-discharge rate per timestep
+# - eta_BES_char: charging efficiency
+# - eta_BES_disc: discharging efficiency
+# - SOC_BES_init: SOC reset fraction at midnight each day
+# - SOC_BES_min: minimum SOC fraction
+# - SOC_BES_max: maximum SOC fraction
+# - E_BES_cap: usable energy capacity in kWh
+# - P_BES_max: maximum charge/discharge power in kW
+# - LCOS: levelized cost of storage capacity in €/kWh
+# - LEOS: lifecycle emissions intensity in kgCO2eq/kWh
+# - CO2eq_BES: total lifecycle emissions in kgCO2eq
+# - lifetime_BES: lifetime in years
+# - CO2eq_BES_annual: annualized lifecycle emissions in kgCO2eq/year
+class BatteryStorage:
+    def __init__(self, config: dict | None = None):
+        cfg = config if config is not None else COMPONENT_PARAMETERS.get("BESS", {})
+        self.enabled = cfg.get("enabled", True)
+        self.sigma = cfg.get("sigma_BES", 0.0)
+        self.eta_char = cfg.get("eta_BES_char", 1.0)
+        self.eta_disc = cfg.get("eta_BES_disc", 1.0)
+        self.soc_init = cfg.get("SOC_BES_init", 0.0)
+        self.soc_min = cfg.get("SOC_BES_min", 0.0)
+        self.soc_max = cfg.get("SOC_BES_max", 1.0)
+        self.E_cap = cfg.get("E_BES_cap", 0.0)
+        self.P_max = cfg.get("P_BES_max", 0.0)
+        self.LCOS = cfg.get("LCOS", 0.0)
+        self.LEOS = cfg.get("LEOS", 0.0)
+        self.CO2eq_BES = cfg.get("CO2eq_BES", 0.0)
+        self.lifetime = cfg.get("lifetime_BES", 0)
+        self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual", 0.0)
+        self.soc = self.soc_init * self.E_cap
+
+    def reset_soc(self) -> None:
+        self.soc = self.soc_init * self.E_cap
+
+    def get_charge_energy_input(self, power_kw: float, delta_t: float = 1.0) -> float:
+        return self.eta_char * max(0.0, min(power_kw, self.P_max)) * delta_t
+
+    def get_discharge_energy_output(self, power_kw: float, delta_t: float = 1.0) -> float:
+        return max(0.0, min(power_kw, self.P_max)) * delta_t / self.eta_disc
+
+    def available_charge_capacity_kwh(self) -> float:
+        return max(0.0, self.soc_max * self.E_cap - self.soc)
+
+    def available_discharge_capacity_kwh(self) -> float:
+        return max(0.0, self.soc - self.soc_min * self.E_cap)
+
+    def apply_self_discharge(self) -> None:
+        self.soc = self.soc * (1.0 - self.sigma)
+
+    def clamp_soc(self) -> None:
+        self.soc = min(max(self.soc, self.soc_min * self.E_cap), self.soc_max * self.E_cap)
 
