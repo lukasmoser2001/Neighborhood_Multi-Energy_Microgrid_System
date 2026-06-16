@@ -1,4 +1,5 @@
 from pathlib import Path
+import csv
 import json
 
 # Load component parameters from Data/Components/component_parameters.json so
@@ -11,6 +12,45 @@ try:
 except Exception:
     COMPONENT_PARAMETERS = {}
 
+_HEAT_COP_FILES = [
+    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_01_2015.csv",
+    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_04_2015.csv",
+    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_07_2015.csv",
+    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_10_2015.csv",
+]
+
+def _parse_float(value: str) -> float:
+    if value is None or value == "":
+        return 0.0
+    return float(value.replace(",", "."))
+
+def _load_heat_cop_data(column_name: str) -> list[list[float]]:
+    data = []
+    for path in _HEAT_COP_FILES:
+        values = []
+        with path.open(newline="", encoding="utf-8") as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                values.append(_parse_float(row.get(column_name, "0")))
+        data.append(values)
+    return data
+
+_HEAT_COP_ASHP_WATER_COLUMN = "FR_COP_ASHP_water"
+_HEAT_COP_GSHP_FLOOR_COLUMN = "FR_COP_GSHP_floor"
+_HEAT_COP_SERIES = {
+    "air": _load_heat_cop_data(_HEAT_COP_ASHP_WATER_COLUMN),
+    "ground": _load_heat_cop_data(_HEAT_COP_GSHP_FLOOR_COLUMN),
+}
+
+
+def _get_heat_pump_cop(series: list[list[float]], season_index: int, hour_index: int) -> float:
+    if season_index < 0 or season_index >= len(series):
+        return 0.0
+    season_data = series[season_index]
+    if hour_index < 0 or hour_index >= len(season_data):
+        return 0.0
+    return max(0.0, season_data[hour_index])
+
 
 # Utility grid component
 # Parameters (in component_parameters.json -> "utility_grid"):
@@ -18,12 +58,19 @@ except Exception:
 # - emission_factor_kg_per_kwh: kg CO2/kWh, emissions from grid electricity
 class UtilityGrid:
     def __init__(self, config: dict | None = None):
-        # If no explicit config passed, read from JSON file
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("utility_grid", {})
-        self.enabled = cfg.get("enabled", True)
-        self.electricity_price_eur_per_kwh = cfg.get("electricity_price_eur_per_kwh", 0.0)
-        self.sell_price_eur_per_kwh = cfg.get("sell_price_eur_per_kwh", 0.0)
-        self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.electricity_price_eur_per_kwh = 0.0
+            self.sell_price_eur_per_kwh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            return
+        try:
+            self.electricity_price_eur_per_kwh = cfg["electricity_price_eur_per_kwh"]
+            self.sell_price_eur_per_kwh = cfg["sell_price_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for UtilityGrid in component_parameters.json")
 
     def get_cost_eur(self, electricity_kwh: float) -> float:
         return electricity_kwh * self.electricity_price_eur_per_kwh
@@ -51,18 +98,38 @@ class UtilityGrid:
 class PVSystem:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("pv_system", {})
-        self.enabled = cfg.get("enabled", True)
-        self.i_stc = cfg.get("i_stc_w_m2", 1000.0)
-        self.t_stc = cfg.get("t_stc_c", 25.0)
-        self.i_ref = cfg.get("i_ref_w_m2", 800.0)
-        self.t_ref = cfg.get("t_ref_c", 20.0)
-        self.t_nom = cfg.get("t_nom_c", 44.0)
-        self.beta = cfg.get("beta_per_c", 0.0024)
-        self.panel_area_m2 = cfg.get("panel_area_m2", 2.08)
-        self.panels_per_household = cfg.get("panels_per_household", 6)
-        self.power_density_w_m2 = cfg.get("power_density_w_m2", 224)
-        self.capex_per_panel_eur = cfg.get("annualized_capital_cost_per_panel_eur", 0.0)
-        self.om_cost_per_kwh = cfg.get("o_and_m_cost_per_kwh_eur", 0.0)
+        # Require explicit enabling in the JSON file
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            # Neutral fallbacks
+            self.i_stc = 1000.0
+            self.t_stc = 25.0
+            self.i_ref = 800.0
+            self.t_ref = 20.0
+            self.t_nom = 44.0
+            self.beta = 0.0
+            self.panel_area_m2 = 0.0
+            self.panels_per_household = 0
+            self.power_density_w_m2 = 0.0
+            self.capex_per_panel_eur = 0.0
+            self.om_cost_per_kwh = 0.0
+            self.p_pv_peak_kw = 0.0
+            self.capex_total_eur = 0.0
+            return
+        try:
+            self.i_stc = cfg["i_stc_w_m2"]
+            self.t_stc = cfg["t_stc_c"]
+            self.i_ref = cfg["i_ref_w_m2"]
+            self.t_ref = cfg["t_ref_c"]
+            self.t_nom = cfg["t_nom_c"]
+            self.beta = cfg["beta_per_c"]
+            self.panel_area_m2 = cfg["panel_area_m2"]
+            self.panels_per_household = cfg["panels_per_household"]
+            self.power_density_w_m2 = cfg["power_density_w_m2"]
+            self.capex_per_panel_eur = cfg["annualized_capital_cost_per_panel_eur"]
+            self.om_cost_per_kwh = cfg["o_and_m_cost_per_kwh_eur"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for PVSystem in component_parameters.json")
         self.p_pv_peak_kw = self.power_density_w_m2 * self.panel_area_m2 * self.panels_per_household / 1000.0
         self.capex_total_eur = self.capex_per_panel_eur * self.panels_per_household
 
@@ -88,9 +155,16 @@ class PVSystem:
 class GasBoiler:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("gas_boiler", {})
-        self.enabled = cfg.get("enabled", True)
-        self.lcoh_eur_per_kwh = cfg.get("lcoh_eur_per_kwh", 0.0)
-        self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.lcoh_eur_per_kwh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            return
+        try:
+            self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for GasBoiler in component_parameters.json")
 
     def get_cost_eur(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.lcoh_eur_per_kwh
@@ -102,15 +176,23 @@ class GasBoiler:
 # Electric boiler component
 # Parameters (in component_parameters.json -> "electric_boiler"):
 # - efficiency: conversion efficiency from electricity to heat (0-1)
-# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat (for bookkeeping)
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions (usually 0)
+# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat (additionally to the electricity cost)
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions (indirect emissions from electric boiler production might get added later))
 class ElectricBoiler:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("electric_boiler", {})
         self.enabled = cfg.get("enabled", False)
-        self.efficiency = cfg.get("efficiency", 1.0)
-        self.lcoh_eur_per_kwh = cfg.get("lcoh_eur_per_kwh", 0.0)
-        self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
+        if not self.enabled:
+            self.efficiency = 0.0
+            self.lcoh_eur_per_kwh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            return
+        try:
+            self.efficiency = cfg["efficiency"]
+            self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for ElectricBoiler in component_parameters.json")
 
     def get_electricity_demand_kwh(self, thermal_kwh: float) -> float:
         return thermal_kwh / self.efficiency if self.efficiency else float("inf")
@@ -120,6 +202,82 @@ class ElectricBoiler:
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.emission_factor_kg_per_kwh
+
+
+# Heat pump air-source component
+# Parameters (in component_parameters.json -> "heat_pump_air"):
+# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
+class HeatPumpAir:
+    def __init__(self, config: dict | None = None):
+        cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_air", {})
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.lcoh_eur_per_kwh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            self.cop_series = []
+            return
+        try:
+            self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for HeatPumpAir in component_parameters.json")
+        self.cop_series = _HEAT_COP_SERIES["air"]
+
+    def get_cop(self, season_index: int, hour_index: int) -> float:
+        if not self.enabled:
+            return 0.0
+        return _get_heat_pump_cop(self.cop_series, season_index, hour_index)
+
+    def get_electricity_demand_kwh(self, thermal_kwh: float, season_index: int, hour_index: int) -> float:
+        if not self.enabled or thermal_kwh <= 0.0:
+            return 0.0
+        cop = self.get_cop(season_index, hour_index)
+        return thermal_kwh / cop if cop > 0.0 else 0.0
+
+    def get_cost_eur(self, thermal_kwh: float) -> float:
+        return thermal_kwh * self.lcoh_eur_per_kwh if self.enabled else 0.0
+
+    def get_emissions_kg(self, thermal_kwh: float) -> float:
+        return 0.0
+
+
+# Heat pump ground-source component
+# Parameters (in component_parameters.json -> "heat_pump_ground"):
+# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
+class HeatPumpGround:
+    def __init__(self, config: dict | None = None):
+        cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_ground", {})
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.lcoh_eur_per_kwh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            self.cop_series = []
+            return
+        try:
+            self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for HeatPumpGround in component_parameters.json")
+        self.cop_series = _HEAT_COP_SERIES["ground"]
+
+    def get_cop(self, season_index: int, hour_index: int) -> float:
+        if not self.enabled:
+            return 0.0
+        return _get_heat_pump_cop(self.cop_series, season_index, hour_index)
+
+    def get_electricity_demand_kwh(self, thermal_kwh: float, season_index: int, hour_index: int) -> float:
+        if not self.enabled or thermal_kwh <= 0.0:
+            return 0.0
+        cop = self.get_cop(season_index, hour_index)
+        return thermal_kwh / cop if cop > 0.0 else 0.0
+
+    def get_cost_eur(self, thermal_kwh: float) -> float:
+        return thermal_kwh * self.lcoh_eur_per_kwh if self.enabled else 0.0
+
+    def get_emissions_kg(self, thermal_kwh: float) -> float:
+        return 0.0
 
 
 # Battery energy storage system component
@@ -140,21 +298,40 @@ class ElectricBoiler:
 class BatteryStorage:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("BESS", {})
-        self.enabled = cfg.get("enabled", True)
-        self.sigma = cfg.get("sigma_BES", 0.0)
-        self.eta_char = cfg.get("eta_BES_char", 1.0)
-        self.eta_disc = cfg.get("eta_BES_disc", 1.0)
-        self.soc_init = cfg.get("SOC_BES_init", 0.0)
-        self.soc_min = cfg.get("SOC_BES_min", 0.0)
-        self.soc_max = cfg.get("SOC_BES_max", 1.0)
-        self.E_cap = cfg.get("E_BES_cap", 0.0)
-        self.P_max = cfg.get("P_BES_max", 0.0)
-        self.LCOS = cfg.get("LCOS", 0.0)
-        self.LEOS = cfg.get("LEOS", 0.0)
-        self.CO2eq_BES = cfg.get("CO2eq_BES", 0.0)
-        self.lifetime = cfg.get("lifetime_BES", 0)
-        self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual", 0.0)
-        self.soc = self.soc_init * self.E_cap
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.sigma = 0.0
+            self.eta_char = 1.0
+            self.eta_disc = 1.0
+            self.soc_init = 0.0
+            self.soc_min = 0.0
+            self.soc_max = 1.0
+            self.E_cap = 0.0
+            self.P_max = 0.0
+            self.LCOS = 0.0
+            self.LEOS = 0.0
+            self.CO2eq_BES = 0.0
+            self.lifetime = 0
+            self.CO2eq_BES_annual = 0.0
+            self.soc = 0.0
+            return
+        try:
+            self.sigma = cfg["sigma_BES"]
+            self.eta_char = cfg["eta_BES_char"]
+            self.eta_disc = cfg["eta_BES_disc"]
+            self.soc_init = cfg["SOC_BES_init"]
+            self.soc_min = cfg["SOC_BES_min"]
+            self.soc_max = cfg["SOC_BES_max"]
+            self.E_cap = cfg["E_BES_cap"]
+            self.P_max = cfg["P_BES_max"]
+            self.LCOS = cfg["LCOS"]
+            self.LEOS = cfg["LEOS"]
+            self.CO2eq_BES = cfg["CO2eq_BES"]
+            self.lifetime = cfg["lifetime_BES"]
+            self.CO2eq_BES_annual = cfg["CO2eq_BES_annual"]
+            self.soc = self.soc_init * self.E_cap
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
 
     def reset_soc(self) -> None:
         self.soc = self.soc_init * self.E_cap

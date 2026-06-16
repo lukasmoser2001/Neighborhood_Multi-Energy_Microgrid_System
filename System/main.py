@@ -2,7 +2,15 @@
 from pathlib import Path
 import csv
 import json
-from Components import UtilityGrid, PVSystem, GasBoiler, ElectricBoiler, BatteryStorage
+from Components import (
+    UtilityGrid,
+    PVSystem,
+    GasBoiler,
+    ElectricBoiler,
+    HeatPumpAir,
+    HeatPumpGround,
+    BatteryStorage,
+)
 
 # File paths and column names
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -104,6 +112,12 @@ def apply_component_parameters(config: dict) -> dict:
     if config["electric_boiler"].get("enabled", False):
         components["electric_boiler"] = ElectricBoiler(config["electric_boiler"])
 
+    if config["heat_pump_air"].get("enabled", False):
+        components["heat_pump_air"] = HeatPumpAir(config["heat_pump_air"])
+
+    if config["heat_pump_ground"].get("enabled", False):
+        components["heat_pump_ground"] = HeatPumpGround(config["heat_pump_ground"])
+
     if config.get("BESS", {}).get("enabled", False):
         components["bess"] = BatteryStorage(config.get("BESS", {}))
     
@@ -132,6 +146,7 @@ def write_annual_results(path: Path, summary: dict) -> None:
         "annual_cost_grid_eur",
         "annual_cost_gas_boiler_eur",
         "annual_cost_electric_boiler_eur",
+        "annual_cost_heat_pump_eur",
         "annual_cost_bess_eur",
         "annual_cost_total_eur",
         "annual_emissions_grid_kg",
@@ -158,6 +173,8 @@ def main() -> None:
     pv = components.get("pv")
     gas_boiler = components.get("gas_boiler")
     electric_boiler = components.get("electric_boiler")
+    heat_pump_air = components.get("heat_pump_air")
+    heat_pump_ground = components.get("heat_pump_ground")
     bess = components.get("bess")
 
     # Read data, compute hourly results, and write outputs.
@@ -172,6 +189,7 @@ def main() -> None:
     total_cost_grid = 0.0
     total_cost_gas_boiler = 0.0
     total_cost_electric_boiler = 0.0
+    total_cost_heat_pump = 0.0
     total_cost_bess = 0.0
     total_emissions_grid = 0.0
     total_emissions_gas_boiler = 0.0
@@ -223,18 +241,27 @@ def main() -> None:
             # Thermal Energy balance
             gas_boiler_heat_kwh = 0.0
             electric_boiler_heat_kwh = 0.0
+            heat_pump_heat_kwh = 0.0
+            heat_pump_electric_demand_kwh = 0.0
             electric_boiler_electric_demand_kwh = 0.0
+            active_heat_pump = None
 
-            if gas_boiler and not electric_boiler:
-                # Gas boiler covers all thermal demand
-                gas_boiler_heat_kwh = thermal_kwh
+            if heat_pump_air:
+                active_heat_pump = heat_pump_air
+            elif heat_pump_ground:
+                active_heat_pump = heat_pump_ground
+
+            if active_heat_pump:
+                heat_pump_heat_kwh = thermal_kwh
+                heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+                    thermal_kwh, season_index, hour_index - 1
+                )
             elif electric_boiler and not gas_boiler:
-                # Electric boiler covers all thermal demand
                 electric_boiler_heat_kwh = thermal_kwh
+            elif gas_boiler and not electric_boiler:
+                gas_boiler_heat_kwh = thermal_kwh
             elif gas_boiler and electric_boiler:
-                # Prioritize electric boiler if both available
                 electric_boiler_heat_kwh = thermal_kwh
-            # If neither is enabled, thermal demand is not met
 
             if electric_boiler and electric_boiler_heat_kwh > 0:
                 electric_boiler_electric_demand_kwh = electric_boiler.get_electricity_demand_kwh(
@@ -242,7 +269,11 @@ def main() -> None:
                 )
 
             # Electricity Energy balance
-            total_electricity_consumption_kwh = electricity_kwh + electric_boiler_electric_demand_kwh
+            total_electricity_consumption_kwh = (
+                electricity_kwh
+                + electric_boiler_electric_demand_kwh
+                + heat_pump_electric_demand_kwh
+            )
             bess_charge_kwh = 0.0
             bess_discharge_kwh = 0.0
             if bess:
@@ -308,6 +339,13 @@ def main() -> None:
                 cost_gas_boiler_eur = gas_boiler.get_cost_eur(gas_boiler_heat_kwh)
 
             cost_electric_boiler_eur = 0.0
+            if electric_boiler:
+                cost_electric_boiler_eur = electric_boiler.get_cost_eur(electric_boiler_heat_kwh)
+
+            cost_heat_pump_eur = 0.0
+            if active_heat_pump:
+                cost_heat_pump_eur = active_heat_pump.get_cost_eur(heat_pump_heat_kwh)
+
             cost_bess_eur = 0.0
             if bess:
                 cost_bess_eur = bess.LCOS * bess.E_cap / (annualization_factor * 24.0)
@@ -319,6 +357,7 @@ def main() -> None:
                 - grid_revenue_eur
                 + cost_gas_boiler_eur
                 + cost_electric_boiler_eur
+                + cost_heat_pump_eur
                 + cost_bess_eur
             )
 
@@ -335,11 +374,13 @@ def main() -> None:
             if electric_boiler:
                 emissions_electric_boiler_kg = electric_boiler.get_emissions_kg(electric_boiler_heat_kwh)
 
+            emissions_heat_pump_kg = 0.0
             emissions_bess_kg = 0.0
             total_emissions_hour_kg = (
                 emissions_grid_kg
                 + emissions_gas_boiler_kg
                 + emissions_electric_boiler_kg
+                + emissions_heat_pump_kg
                 + emissions_bess_kg
             )
 
@@ -354,6 +395,7 @@ def main() -> None:
             total_cost_grid += cost_grid_eur
             total_cost_gas_boiler += cost_gas_boiler_eur
             total_cost_electric_boiler += cost_electric_boiler_eur
+            total_cost_heat_pump += cost_heat_pump_eur
             total_cost_bess += cost_bess_eur
             total_emissions_grid += emissions_grid_kg
             total_emissions_gas_boiler += emissions_gas_boiler_kg
@@ -366,6 +408,9 @@ def main() -> None:
                     "hour": hour_index,
                     "electricity_demand_kwh": round(electricity_kwh, 4),
                     "total_electricity_consumption_kwh": round(total_electricity_consumption_kwh, 4),
+                    "heat_pump_type": heat_pump_air.__class__.__name__ if heat_pump_air else (heat_pump_ground.__class__.__name__ if heat_pump_ground else ""),
+                    "heat_pump_heat_kwh": round(heat_pump_heat_kwh, 4),
+                    "heat_pump_electric_demand_kwh": round(heat_pump_electric_demand_kwh, 4),
                     "electric_boiler_electric_demand_kwh": round(electric_boiler_electric_demand_kwh, 4),
                     "thermal_demand_kwh": round(thermal_kwh, 4),
                     "pv_output_kwh": round(pv_output_kwh, 4),
@@ -383,11 +428,13 @@ def main() -> None:
                     "cost_grid_eur": round(cost_grid_eur, 4),
                     "cost_gas_boiler_eur": round(cost_gas_boiler_eur, 4),
                     "cost_electric_boiler_eur": round(cost_electric_boiler_eur, 4),
+                    "cost_heat_pump_eur": round(cost_heat_pump_eur, 4),
                     "cost_bess_eur": round(cost_bess_eur, 4),
                     "total_cost_hour_eur": round(total_cost_hour_eur, 4),
                     "emissions_grid_kg": round(emissions_grid_kg, 4),
                     "emissions_gas_boiler_kg": round(emissions_gas_boiler_kg, 4),
                     "emissions_electric_boiler_kg": round(emissions_electric_boiler_kg, 4),
+                    "emissions_heat_pump_kg": round(emissions_heat_pump_kg, 4),
                     "emissions_bess_kg": round(emissions_bess_kg, 4),
                     "total_emissions_hour_kg": round(total_emissions_hour_kg, 4),
                 }
@@ -408,6 +455,7 @@ def main() -> None:
     annual_cost_grid = total_cost_grid * annualization_factor
     annual_cost_gas_boiler = total_cost_gas_boiler * annualization_factor
     annual_cost_electric_boiler = total_cost_electric_boiler * annualization_factor
+    total_cost_heat_pump = total_cost_heat_pump * annualization_factor
     annual_cost_bess = total_cost_bess * annualization_factor
     annual_cost_total = (
         annual_cost_pv_capex_total
@@ -415,6 +463,7 @@ def main() -> None:
         + annual_cost_grid
         + annual_cost_gas_boiler
         + annual_cost_electric_boiler
+        + total_cost_heat_pump
         + annual_cost_bess
     )
 
@@ -446,6 +495,7 @@ def main() -> None:
             "annual_cost_grid_eur": round(annual_cost_grid, 4),
             "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
             "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
+            "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
             "annual_cost_bess_eur": round(annual_cost_bess, 4),
             "annual_cost_total_eur": round(annual_cost_total, 4),
             "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
@@ -469,6 +519,9 @@ RESULT_FIELDS = [
     "hour",
     "electricity_demand_kwh",
     "total_electricity_consumption_kwh",
+    "heat_pump_type",
+    "heat_pump_heat_kwh",
+    "heat_pump_electric_demand_kwh",
     "electric_boiler_electric_demand_kwh",
     "thermal_demand_kwh",
     "pv_output_kwh",
@@ -486,11 +539,13 @@ RESULT_FIELDS = [
     "cost_grid_eur",
     "cost_gas_boiler_eur",
     "cost_electric_boiler_eur",
+    "cost_heat_pump_eur",
     "cost_bess_eur",
     "total_cost_hour_eur",
     "emissions_grid_kg",
     "emissions_gas_boiler_kg",
     "emissions_electric_boiler_kg",
+    "emissions_heat_pump_kg",
     "emissions_bess_kg",
     "total_emissions_hour_kg",
 ]
