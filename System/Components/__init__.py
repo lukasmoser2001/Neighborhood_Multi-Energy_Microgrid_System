@@ -10,6 +10,7 @@ from .components import (
     HeatPumpAir,
     HeatPumpGround,
     BatteryStorage,
+    ThermalEnergyStorage,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "HeatPumpAir",
     "HeatPumpGround",
     "BatteryStorage",
+    "ThermalEnergyStorage",
 ]

@@ -58,5 +58,14 @@
     "CO2eq_BES": 273.88,
     "lifetime_BES": 10,
     "CO2eq_BES_annual": 27.388
+  },
+  "TESS": {
+    "enabled": true,
+    "E_TESS_cap": 22.5,
+    "sigma_TESS": 0.0006,
+    "eta_PHE": 0.9,
+    "SOC_TESS_12am": 0.5,
+    "LCOH_TESS": 0.025,
+    "LEOH_TESS": 0.0
   }
 }

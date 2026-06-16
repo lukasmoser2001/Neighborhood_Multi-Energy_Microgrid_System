@@ -207,7 +207,7 @@ class ElectricBoiler:
 # Heat pump air-source component
 # Parameters (in component_parameters.json -> "heat_pump_air"):
 # - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions (no direct emissions; indirect maybe added later; for now only due to added electricity consumption taken into account)
 class HeatPumpAir:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_air", {})
@@ -353,4 +353,58 @@ class BatteryStorage:
 
     def clamp_soc(self) -> None:
         self.soc = min(max(self.soc, self.soc_min * self.E_cap), self.soc_max * self.E_cap)
+
+
+# Thermal energy storage system component
+# Parameters (in component_parameters.json -> "TESS"):
+# - E_TESS_cap: kWh, usable thermal storage capacity
+# - sigma_TESS: self-discharge rate per timestep
+# - eta_PHE: plate heat exchanger efficiency
+# - SOC_TESS_12am: SOC reset fraction at midnight each day
+# - LCOH_TESS: €/kWh, levelized cost of heat
+# - LEOH_TESS: kgCO2eq/kWh, lifecycle emissions intensity
+class ThermalEnergyStorage:
+    def __init__(self, config: dict | None = None):
+        cfg = config if config is not None else COMPONENT_PARAMETERS.get("TESS", {})
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.sigma = 0.0
+            self.eta_phe = 1.0
+            self.soc_init = 0.0
+            self.E_cap = 0.0
+            self.lcoh = 0.0
+            self.leoh = 0.0
+            self.soc = 0.0
+            return
+        try:
+            self.sigma = cfg["sigma_TESS"]
+            self.eta_phe = cfg["eta_PHE"]
+            self.soc_init = cfg["SOC_TESS_12am"]
+            self.E_cap = cfg["E_TESS_cap"]
+            self.lcoh = cfg["LCOH_TESS"]
+            self.leoh = cfg["LEOH_TESS"]
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for ThermalEnergyStorage in component_parameters.json")
+        self.soc = self.soc_init * self.E_cap
+
+    def reset_soc(self) -> None:
+        self.soc = self.soc_init * self.E_cap
+
+    def available_charge_capacity_kwh(self) -> float:
+        return max(0.0, self.E_cap - self.soc)
+
+    def available_discharge_capacity_kwh(self) -> float:
+        return max(0.0, self.soc)
+
+    def apply_self_discharge(self) -> None:
+        self.soc = self.soc * (1.0 - self.sigma)
+
+    def clamp_soc(self) -> None:
+        self.soc = min(max(self.soc, 0.0), self.E_cap)
+
+    def get_cost_eur(self, thermal_kwh: float) -> float:
+        return thermal_kwh * self.lcoh if self.enabled else 0.0
+
+    def get_emissions_kg(self, thermal_kwh: float) -> float:
+        return thermal_kwh * self.leoh if self.enabled else 0.0
 
