@@ -496,34 +496,42 @@ def main() -> None:
             
              # BESS correction
              if bess:
-            # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
+                 # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
                  bess_delta_kwh = bess.force_soc_to_target()
 
                  if bess_delta_kwh > 0.0:
-                 # Deficit: grid supplies the missing electrical energy
+                     # Deficit: grid supplies the missing electrical energy
                      grid_supply_kwh += bess_delta_kwh
                      total_electricity_consumption_kwh += bess_delta_kwh
 
                  elif bess_delta_kwh < 0.0:
-                 # Surplus: excess electrical energy is sold back to grid
+                     # Surplus: excess electrical energy is sold back to grid
                      grid_export_kwh += abs(bess_delta_kwh)
 
                  # Log the corrected SOC value (already set inside force_soc_to_target)
                  bess_soc_kwh = bess.soc
-
              # TESS correction
              if tess:
-             # force_soc_to_target() internally sets tess.soc = target and returns the signed delta
                  tess_delta_kwh = tess.force_soc_to_target()
-
                  if tess_delta_kwh > 0.0:
-                 # Deficit: reflect the missing thermal energy in the thermal demand balance
-                     thermal_demand_kwh += tess_delta_kwh
-
-                 # Surplus (tess_delta_kwh < 0) is discarded; no revenue for thermal
-
-                 # Log the corrected SOC value (already set inside force_soc_to_target)
+                     thermal_kwh += tess_delta_kwh
+                     # Propagate the extra demand to the active heat source
+                     if active_heat_pump:
+                         heat_pump_heat_kwh += tess_delta_kwh
+                         heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(heat_pump_heat_kwh, season_index, hour_index - 1)
+                         total_electricity_consumption_kwh += (active_heat_pump.get_electricity_demand_kwh(tess_delta_kwh, season_index, hour_index - 1))
+                     elif electric_boiler and not gas_boiler:
+                         electric_boiler_heat_kwh += tess_delta_kwh
+                         extra_elec = electric_boiler.get_electricity_demand_kwh(tess_delta_kwh)
+                         electric_boiler_electric_demand_kwh += extra_elec
+                         total_electricity_consumption_kwh += extra_elec
+                     elif gas_boiler:
+                         gas_boiler_heat_kwh += tess_delta_kwh
+                    # Surplus (tess_delta_kwh < 0) is discarded; no revenue for thermal
+                    # Log the corrected SOC value (already set inside force_soc_to_target)
                  tess_soc_kwh = tess.soc
+
+             
 
             # Costs
             cost_pv_capex_hour_eur = 0.0

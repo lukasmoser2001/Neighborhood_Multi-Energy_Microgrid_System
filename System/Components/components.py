@@ -335,17 +335,35 @@ class BatteryStorage:
 
     def reset_soc(self) -> None:
         self.soc = self.soc_init * self.E_cap
-    
+
     def get_soc_target_kwh(self) -> float:
         # Target SOC in kWh to restore at end of day
         return self.soc_init * self.E_cap
-    
+
     def force_soc_to_target(self) -> float:
         # Returns signed delta: positive = deficit (buy from grid), negative = surplus (sell to grid)
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
         return delta
+
+    def get_charge_energy_input(self, power_kw: float) -> float:
+        return self.eta_char * max(0.0, min(power_kw, self.P_max))
+
+    def get_discharge_energy_output(self, power_kw: float) -> float:
+        return max(0.0, min(power_kw, self.P_max)) / self.eta_disc
+
+    def available_charge_capacity_kwh(self) -> float:
+        return max(0.0, self.soc_max * self.E_cap - self.soc)
+
+    def available_discharge_capacity_kwh(self) -> float:
+        return max(0.0, self.soc - self.soc_min * self.E_cap)
+
+    def apply_self_discharge(self) -> None:
+        self.soc = self.soc * (1.0 - self.sigma)
+
+    def clamp_soc(self) -> None:
+        self.soc = min(max(self.soc, self.soc_min * self.E_cap), self.soc_max * self.E_cap)
 
 
 # Thermal energy storage system component
