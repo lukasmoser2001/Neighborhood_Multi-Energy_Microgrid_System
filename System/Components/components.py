@@ -402,6 +402,32 @@ class ThermalEnergyStorage:
     def clamp_soc(self) -> None:
         self.soc = min(max(self.soc, 0.0), self.E_cap)
 
+    def get_discharge_for_demand(self, thermal_demand_kwh: float) -> float:
+        if not self.enabled or thermal_demand_kwh <= 0.0:
+            return 0.0
+        return min(thermal_demand_kwh / self.eta_phe, self.available_discharge_capacity_kwh())
+
+    def get_heat_from_discharge(self, q_tess_out: float) -> float:
+        return max(0.0, q_tess_out * self.eta_phe)
+
+    def get_charge_from_heat_source(self, thermal_input_kwh: float) -> float:
+        if not self.enabled or thermal_input_kwh <= 0.0:
+            return 0.0
+        return min(thermal_input_kwh, self.available_charge_capacity_kwh())
+
+    def dispatch_for_demand(self, thermal_demand_kwh: float) -> tuple[float, float, float]:
+        q_tess_out = self.get_discharge_for_demand(thermal_demand_kwh)
+        heat_supplied = self.get_heat_from_discharge(q_tess_out)
+        remaining_demand = max(0.0, thermal_demand_kwh - heat_supplied)
+        self.update_state(q_tess_in=0.0, q_tess_out=q_tess_out)
+        return q_tess_out, heat_supplied, remaining_demand
+
+    def update_state(self, q_tess_in: float, q_tess_out: float) -> None:
+        if not self.enabled:
+            return
+        self.soc = self.soc * (1.0 - self.sigma) + q_tess_in - q_tess_out
+        self.clamp_soc()
+
     def get_cost_eur(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.lcoh if self.enabled else 0.0
 

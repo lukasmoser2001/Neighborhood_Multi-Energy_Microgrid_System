@@ -271,30 +271,57 @@ def main() -> None:
             elif gas_boiler and electric_boiler:
                 electric_boiler_heat_kwh = thermal_kwh
 
+            if tess:
+                if hour_index == 1:
+                    tess.reset_soc()
+
+                tess_discharge_kwh = tess.get_discharge_for_demand(thermal_kwh)
+                tess_heat_supplied = tess.get_heat_from_discharge(tess_discharge_kwh)
+                remaining_thermal_demand = max(0.0, thermal_kwh - tess_heat_supplied)
+            else:
+                tess_discharge_kwh = 0.0
+                tess_heat_supplied = 0.0
+                remaining_thermal_demand = thermal_kwh
+
+            if active_heat_pump:
+                heat_pump_heat_kwh = remaining_thermal_demand
+            elif electric_boiler and not gas_boiler:
+                electric_boiler_heat_kwh = remaining_thermal_demand
+            elif gas_boiler and not electric_boiler:
+                gas_boiler_heat_kwh = remaining_thermal_demand
+            elif gas_boiler and electric_boiler:
+                electric_boiler_heat_kwh = remaining_thermal_demand
+
+            tess_charge_kwh = 0.0
+            if tess and tess.available_charge_capacity_kwh() > 0.0:
+                tess_charge_kwh = tess.get_charge_from_heat_source(
+                    heat_pump_heat_kwh + electric_boiler_heat_kwh + gas_boiler_heat_kwh
+                )
+                if tess_charge_kwh > 0.0:
+                    if active_heat_pump:
+                        heat_pump_heat_kwh += tess_charge_kwh
+                    elif electric_boiler and not gas_boiler:
+                        electric_boiler_heat_kwh += tess_charge_kwh
+                    elif gas_boiler and not electric_boiler:
+                        gas_boiler_heat_kwh += tess_charge_kwh
+                    elif gas_boiler and electric_boiler:
+                        electric_boiler_heat_kwh += tess_charge_kwh
+
             if electric_boiler and electric_boiler_heat_kwh > 0:
                 electric_boiler_electric_demand_kwh = electric_boiler.get_electricity_demand_kwh(
                     electric_boiler_heat_kwh
                 )
 
-            # Thermal Energy Storage balance
-            tess_charge_kwh = 0.0
-            tess_discharge_kwh = 0.0
-            tess_soc_kwh = 0.0
+            if active_heat_pump:
+                heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+                    heat_pump_heat_kwh, season_index, hour_index - 1
+                )
+
             if tess:
-                if hour_index == 1:
-                    tess.reset_soc()
-
-                q_tess_out_target = thermal_kwh / tess.eta_phe
-                q_tess_out = min(q_tess_out_target, tess.available_discharge_capacity_kwh())
-                tess_heat_supplied = q_tess_out * tess.eta_phe
-                tess_discharge_kwh = q_tess_out
-                q_tess_in = max(0.0, thermal_kwh - tess_heat_supplied)
-                tess_charge_kwh = q_tess_in
-
-                tess.apply_self_discharge()
-                tess.soc += tess_charge_kwh - tess_discharge_kwh
-                tess.clamp_soc()
+                tess.update_state(q_tess_in=tess_charge_kwh, q_tess_out=tess_discharge_kwh)
                 tess_soc_kwh = tess.soc
+            else:
+                tess_soc_kwh = 0.0
 
             # Electricity Energy balance
             total_electricity_consumption_kwh = (

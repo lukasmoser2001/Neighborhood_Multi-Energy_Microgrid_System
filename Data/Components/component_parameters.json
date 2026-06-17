@@ -28,7 +28,7 @@
     "emission_factor_kg_per_kwh": 0.02
   },
   "electric_boiler": {
-    "enabled": true,
+    "enabled": false,
     "efficiency": 0.99,
     "lcoh_eur_per_kwh": 0.15,
     "emission_factor_kg_per_kwh": 0.0
@@ -44,7 +44,7 @@
     "emission_factor_kg_per_kwh": 0.0
   },
   "BESS": {
-    "enabled": true,
+    "enabled": false,
     "sigma_BES": 0.0003,
     "eta_BES_char": 0.945,
     "eta_BES_disc": 0.945,
