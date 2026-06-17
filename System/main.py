@@ -221,7 +221,7 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict]) -> None:
     "heat_pump_heat_kwh": "#e377c2",                   # pink
     "gas_boiler_heat_kwh": "#7f7f7f",                  # gray
     "electric_boiler_heat_kwh": "#bcbd22",             # olive
-    "tess_soc_kwh": "#17becf",                         # cyan
+    "tess_soc_kwh": "#17becf",                         # teal-cyan
     }
 
     for season in season_order:
@@ -490,6 +490,40 @@ def main() -> None:
 
             pv_used_kwh = pv_output_kwh - grid_export_kwh
             bess_soc_kwh = bess.soc if bess else 0.0
+
+            # End-of-day SOC restoration at hour 24
+            if hour_index == 24:
+            
+             # BESS correction
+             if bess:
+            # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
+                 bess_delta_kwh = bess.force_soc_to_target()
+
+                 if bess_delta_kwh > 0.0:
+                 # Deficit: grid supplies the missing electrical energy
+                     grid_supply_kwh += bess_delta_kwh
+                     total_electricity_consumption_kwh += bess_delta_kwh
+
+                 elif bess_delta_kwh < 0.0:
+                 # Surplus: excess electrical energy is sold back to grid
+                     grid_export_kwh += abs(bess_delta_kwh)
+
+                 # Log the corrected SOC value (already set inside force_soc_to_target)
+                 bess_soc_kwh = bess.soc
+
+             # TESS correction
+             if tess:
+             # force_soc_to_target() internally sets tess.soc = target and returns the signed delta
+                 tess_delta_kwh = tess.force_soc_to_target()
+
+                 if tess_delta_kwh > 0.0:
+                 # Deficit: reflect the missing thermal energy in the thermal demand balance
+                     thermal_demand_kwh += tess_delta_kwh
+
+                 # Surplus (tess_delta_kwh < 0) is discarded; no revenue for thermal
+
+                 # Log the corrected SOC value (already set inside force_soc_to_target)
+                 tess_soc_kwh = tess.soc
 
             # Costs
             cost_pv_capex_hour_eur = 0.0
