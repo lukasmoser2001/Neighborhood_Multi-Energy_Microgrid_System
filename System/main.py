@@ -1,6 +1,9 @@
 from pathlib import Path
 import csv
 import json
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend, safe for scripts without a display
+import matplotlib.pyplot as plt
 from Components import (
     UtilityGrid,
     PVSystem,
@@ -166,6 +169,118 @@ def write_annual_results(path: Path, summary: dict) -> None:
         writer.writeheader()
         writer.writerow(summary)
 
+def plot_seasonal_energy_diagrams(hourly_results: list[dict]) -> None:
+    #Generate and save electrical and thermal energy diagrams for each season.
+
+    season_order = ["Winter", "Spring", "Summer", "Autumn"]
+    
+    electric_cols = [
+    "electricity_demand_kwh",
+    "total_electricity_consumption_kwh",
+    "pv_output_kwh",
+    "grid_supply_kwh",
+    "grid_export_kwh",
+    "heat_pump_electric_demand_kwh",
+    "electric_boiler_electric_demand_kwh",
+    "bess_soc_kwh",
+    ]
+    thermal_cols = [
+    "thermal_demand_kwh",
+    "heat_pump_heat_kwh",
+    "gas_boiler_heat_kwh",
+    "electric_boiler_heat_kwh",
+    "tess_soc_kwh",
+    ]
+    legend_labels = {
+    #electricity energy diagram labels
+    "electricity_demand_kwh": "Demand",
+    "total_electricity_consumption_kwh": "Total elec.",
+    "pv_output_kwh": "PV output",
+    "grid_supply_kwh": "Grid import",
+    "grid_export_kwh": "Grid export",
+    "heat_pump_electric_demand_kwh": "HP elec.",
+    "electric_boiler_electric_demand_kwh": "EB elec.",
+    "bess_soc_kwh": "BESS SOC",
+    #thermal energy diagram labels
+    "tess_soc_kwh": "TESS SOC",
+    "thermal_demand_kwh": "Thermal dem.",
+    "heat_pump_heat_kwh": "HP heat",
+    "gas_boiler_heat_kwh": "Gas boiler",
+    "electric_boiler_heat_kwh": "EB heat",
+    }
+    colors = {
+    "electricity_demand_kwh": "#1f77b4",               # blue
+    "total_electricity_consumption_kwh": "#ff7f0e",   # orange
+    "pv_output_kwh": "#f7c948",                        # yellow
+    "grid_supply_kwh": "#17becf",                      # cyan
+    "grid_export_kwh": "#aec7e8",                      # light blue
+    "heat_pump_electric_demand_kwh": "#2ca02c",        # green
+    "electric_boiler_electric_demand_kwh": "#d62728",  # red
+    "bess_soc_kwh": "#9467bd",                         # purple
+    "thermal_demand_kwh": "#8c564b",                   # brown
+    "heat_pump_heat_kwh": "#e377c2",                   # pink
+    "gas_boiler_heat_kwh": "#7f7f7f",                  # gray
+    "electric_boiler_heat_kwh": "#bcbd22",             # olive
+    "tess_soc_kwh": "#17becf",                         # cyan
+    }
+
+    for season in season_order:
+        season_rows = sorted(
+            [r for r in hourly_results if r["season"] == season],
+            key=lambda r: r["hour"],
+        )
+
+        if not season_rows:
+            continue
+
+        hours = [r["hour"] for r in season_rows]
+        season_slug = season.lower()
+
+        # Electrical energy diagram
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for col in electric_cols:
+            ax.plot(
+                hours,
+                [r[col] for r in season_rows],
+                label=legend_labels[col],
+                color=colors[col],
+                linewidth=2,
+            )
+        ax.set_title(f"{season} — Electrical Energy")
+        ax.set_xlabel("Time [h]")
+        ax.set_ylabel("Electrical energy [kWh]")
+        ax.set_xlim(1, 24)
+        ax.set_xticks(range(1, 25))
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend()
+        OUTPUT_FILE = BASE_DIR / "Results" / f"{season_slug}_electrical_energy.png"
+        fig.tight_layout()
+        fig.savefig(OUTPUT_FILE, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  diagram saved: {OUTPUT_FILE}")
+
+        # Thermal energy diagram
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for col in thermal_cols:
+            ax.plot(
+                hours,
+                [r[col] for r in season_rows],
+                label=legend_labels[col],
+                color=colors[col],
+                linewidth=2,
+            )
+        ax.set_title(f"{season} — Thermal Energy")
+        ax.set_xlabel("Time [h]")
+        ax.set_ylabel("Thermal energy [kWh]")
+        ax.set_xlim(1, 24)
+        ax.set_xticks(range(1, 25))
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend()
+        OUTPUT_FILE = BASE_DIR / "Results" / f"{season_slug}_thermal_energy.png"
+        fig.tight_layout()
+        fig.savefig(OUTPUT_FILE, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  diagram saved: {OUTPUT_FILE}")
 
 def main() -> None:
     # Load component parameters and instantiate only enabled components
@@ -475,7 +590,6 @@ def main() -> None:
                     "hour": hour_index,
                     "electricity_demand_kwh": round(electricity_kwh, 4),
                     "total_electricity_consumption_kwh": round(total_electricity_consumption_kwh, 4),
-                    "heat_pump_type": heat_pump_air.__class__.__name__ if heat_pump_air else (heat_pump_ground.__class__.__name__ if heat_pump_ground else ""),
                     "heat_pump_heat_kwh": round(heat_pump_heat_kwh, 4),
                     "heat_pump_electric_demand_kwh": round(heat_pump_electric_demand_kwh, 4),
                     "electric_boiler_electric_demand_kwh": round(electric_boiler_electric_demand_kwh, 4),
@@ -553,9 +667,14 @@ def main() -> None:
         + annual_emissions_bess
         + annual_emissions_tess
     )
+#heatpump missing, bc emissions are included in the grid emissions for electricity consumption; maybe adding LEOH bc of production emmsions and related to refrigerants
+#same would apply for electric boiler emissions, but they are calculated separately here for clarity
 
     # Write hourly results
     write_hourly_results(OUTPUT_FILE, hourly_results)
+
+# Generate seasonal energy diagrams
+    plot_seasonal_energy_diagrams(hourly_results)
 
     # Write annual results
     write_annual_results(
@@ -597,7 +716,6 @@ RESULT_FIELDS = [
     "hour",
     "electricity_demand_kwh",
     "total_electricity_consumption_kwh",
-    "heat_pump_type",
     "heat_pump_heat_kwh",
     "heat_pump_electric_demand_kwh",
     "electric_boiler_electric_demand_kwh",

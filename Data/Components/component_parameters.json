@@ -44,8 +44,8 @@
     "emission_factor_kg_per_kwh": 0.0
   },
   "BESS": {
-    "enabled": false,
-    "sigma_BES": 0.0003,
+    "enabled": true,
+    "sigma_BES": 0.00003,
     "eta_BES_char": 0.945,
     "eta_BES_disc": 0.945,
     "SOC_BES_init": 0.5,
