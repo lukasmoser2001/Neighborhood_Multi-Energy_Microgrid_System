@@ -283,7 +283,7 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        el_output = BASE_DIR / "Results" / f"{season_slug}_el_{component_suffix}.png"
+        el_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_el_{component_suffix}.png"
         fig.tight_layout()
         fig.savefig(el_output, dpi=300, bbox_inches="tight")
         plt.close(fig)
@@ -306,7 +306,7 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        th_output = BASE_DIR / "Results" / f"{season_slug}_th_{component_suffix}.png"
+        th_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_th_{component_suffix}.png"
         fig.tight_layout()
         fig.savefig(th_output, dpi=300, bbox_inches="tight")
         plt.close(fig)
@@ -750,8 +750,8 @@ def main() -> None:
 
     # Build output filenames with component suffix
     component_suffix = build_component_suffix(components)
-    output_file = BASE_DIR / "Results" / f"hourly_results_{component_suffix}.csv"
-    annual_output_file = BASE_DIR / "Results" / f"annual_results_{component_suffix}.csv"
+    output_file = BASE_DIR / "Results" / "Tables" / f"hourly_results_{component_suffix}.csv"
+    annual_output_file = BASE_DIR / "Results" / "Tables" / f"annual_results_{component_suffix}.csv"
 
     # Write hourly results
     write_hourly_results(output_file, hourly_results)

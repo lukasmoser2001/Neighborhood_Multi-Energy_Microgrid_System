@@ -9,7 +9,7 @@
     "emission_factor_kg_per_kwh": 0.020
   },
   "pv_system": {
-    "enabled": true,
+    "enabled": false,
     "i_stc_w_m2": 1000.0,
     "t_stc_c": 25.0,
     "i_ref_w_m2": 800.0,
@@ -17,13 +17,13 @@
     "t_nom_c": 44.0,
     "beta_per_c": 0.0024,
     "panel_area_m2": 2.08,
-    "panels_per_household": 6,
+    "panels_per_household": 10,
     "power_density_w_m2": 224,
     "annualized_capital_cost_per_panel_eur": 15.74,
     "o_and_m_cost_per_kwh_eur": 0.01
   },
   "gas_boiler": {
-    "enabled": false,
+    "enabled": true,
     "lcoh_eur_per_kwh": 0.13,
     "emission_factor_kg_per_kwh": 0.02
   },
@@ -34,7 +34,7 @@
     "emission_factor_kg_per_kwh": 0.0
   },
   "heat_pump_air": {
-    "enabled": true,
+    "enabled": false,
     "lcoh_eur_per_kwh": 0.135,
     "emission_factor_kg_per_kwh": 0.0
   },
@@ -44,7 +44,7 @@
     "emission_factor_kg_per_kwh": 0.0
   },
   "BESS": {
-    "enabled": true,
+    "enabled": false,
     "sigma_BES": 0.00003,
     "eta_BES_char": 0.945,
     "eta_BES_disc": 0.945,
@@ -60,7 +60,7 @@
     "CO2eq_BES_annual": 27.388
   },
   "TESS": {
-    "enabled": true,
+    "enabled": false,
     "E_TESS_cap": 22.5,
     "sigma_TESS": 0.0006,
     "eta_PHE": 0.9,
