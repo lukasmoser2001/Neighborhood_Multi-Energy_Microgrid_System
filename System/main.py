@@ -102,16 +102,16 @@ def apply_component_parameters(config: dict) -> dict:
     # Instantiate and return only enabled components from configuration.
     # Component parameter descriptions live as comments in System/Components/components.py
     components = {}
-    
+
     if config["utility_grid"].get("enabled", True):
         components["grid"] = UtilityGrid(config["utility_grid"])
-    
+
     if config["pv_system"].get("enabled", True):
         components["pv"] = PVSystem(config["pv_system"])
-    
+
     if config["gas_boiler"].get("enabled", False):
         components["gas_boiler"] = GasBoiler(config["gas_boiler"])
-    
+
     if config["electric_boiler"].get("enabled", False):
         components["electric_boiler"] = ElectricBoiler(config["electric_boiler"])
 
@@ -126,7 +126,7 @@ def apply_component_parameters(config: dict) -> dict:
 
     if config.get("TESS", {}).get("enabled", False):
         components["tess"] = ThermalEnergyStorage(config.get("TESS", {}))
-    
+
     return components
 
 
@@ -169,6 +169,7 @@ def write_annual_results(path: Path, summary: dict) -> None:
         writer.writeheader()
         writer.writerow(summary)
 
+
 def build_component_suffix(components: dict) -> str:
     # Build a short filename suffix from enabled component abbreviations.
     abbrevs = []
@@ -188,8 +189,9 @@ def build_component_suffix(components: dict) -> str:
         abbrevs.append("tess")
     return "_".join(abbrevs) if abbrevs else "base"
 
+
 def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) -> None:
-    #Generate and save electrical and thermal energy diagrams for each season.
+    # Generate and save electrical and thermal energy diagrams for each season.
 
     season_order = ["Winter", "Spring", "Summer", "Autumn"]
     component_suffix = build_component_suffix(components)
@@ -220,36 +222,36 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         thermal_cols.append("tess_soc_kwh")
 
     legend_labels = {
-    #electricity energy diagram labels
-    "electricity_demand_kwh": "Demand",
-    "total_electricity_consumption_kwh": "Total elec.",
-    "pv_output_kwh": "PV output",
-    "grid_supply_kwh": "Grid import",
-    "grid_export_kwh": "Grid export",
-    "heat_pump_electric_demand_kwh": "HP elec.",
-    "electric_boiler_electric_demand_kwh": "EB elec.",
-    "bess_soc_kwh": "BESS SOC",
-    #thermal energy diagram labels
-    "tess_soc_kwh": "TESS SOC",
-    "thermal_demand_kwh": "Thermal dem.",
-    "heat_pump_heat_kwh": "HP heat",
-    "gas_boiler_heat_kwh": "Gas boiler",
-    "electric_boiler_heat_kwh": "EB heat",
+        # electricity energy diagram labels
+        "electricity_demand_kwh": "Demand",
+        "total_electricity_consumption_kwh": "Total elec.",
+        "pv_output_kwh": "PV output",
+        "grid_supply_kwh": "Grid import",
+        "grid_export_kwh": "Grid export",
+        "heat_pump_electric_demand_kwh": "HP elec.",
+        "electric_boiler_electric_demand_kwh": "EB elec.",
+        "bess_soc_kwh": "BESS SOC",
+        # thermal energy diagram labels
+        "tess_soc_kwh": "TESS SOC",
+        "thermal_demand_kwh": "Thermal dem.",
+        "heat_pump_heat_kwh": "HP heat",
+        "gas_boiler_heat_kwh": "Gas boiler",
+        "electric_boiler_heat_kwh": "EB heat",
     }
     colors = {
-    "electricity_demand_kwh": "#1f77b4",               # blue
-    "total_electricity_consumption_kwh": "#ff7f0e",   # orange
-    "pv_output_kwh": "#f7c948",                        # yellow
-    "grid_supply_kwh": "#17becf",                      # cyan
-    "grid_export_kwh": "#aec7e8",                      # light blue
-    "heat_pump_electric_demand_kwh": "#2ca02c",        # green
-    "electric_boiler_electric_demand_kwh": "#d62728",  # red
-    "bess_soc_kwh": "#9467bd",                         # purple
-    "thermal_demand_kwh": "#8c564b",                   # brown
-    "heat_pump_heat_kwh": "#e377c2",                   # pink
-    "gas_boiler_heat_kwh": "#7f7f7f",                  # gray
-    "electric_boiler_heat_kwh": "#bcbd22",             # olive
-    "tess_soc_kwh": "#17becf",                         # teal-cyan
+        "electricity_demand_kwh": "#1f77b4",              # blue
+        "total_electricity_consumption_kwh": "#ff7f0e",  # orange
+        "pv_output_kwh": "#f7c948",                       # yellow
+        "grid_supply_kwh": "#17becf",                     # cyan
+        "grid_export_kwh": "#aec7e8",                     # light blue
+        "heat_pump_electric_demand_kwh": "#2ca02c",       # green
+        "electric_boiler_electric_demand_kwh": "#d62728", # red
+        "bess_soc_kwh": "#9467bd",                        # purple
+        "thermal_demand_kwh": "#8c564b",                  # brown
+        "heat_pump_heat_kwh": "#e377c2",                  # pink
+        "gas_boiler_heat_kwh": "#7f7f7f",                 # gray
+        "electric_boiler_heat_kwh": "#bcbd22",            # olive
+        "tess_soc_kwh": "#17becf",                        # teal-cyan
     }
 
     for season in season_order:
@@ -310,12 +312,13 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         plt.close(fig)
         print(f"  diagram saved: {th_output}")
 
+
 def main() -> None:
     # Load component parameters and instantiate only enabled components
     component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     components = apply_component_parameters(component_config)
     annualization_factor = component_config["annualization"]["factor"]
-    
+
     # Extract enabled components
     grid = components.get("grid")
     pv = components.get("pv")
@@ -349,7 +352,7 @@ def main() -> None:
 
     # Read all solar data (full year from Jan 1, 2023)
     all_solar_data = read_solar_data(SOLAR_DATA_FILE)
-    
+
     # Hour indices for representative days: Jan 15, Apr 15, Jul 15, Oct 15
     # (Data starts Jan 1 00:00, so hour 336 = Jan 15, 2496 = Apr 15, etc.)
     SEASON_HOUR_INDICES = [
@@ -521,45 +524,50 @@ def main() -> None:
 
             # End-of-day SOC restoration at hour 24
             if hour_index == 24:
-            
-             # BESS correction
-             if bess:
-                 # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
-                 bess_delta_kwh = bess.force_soc_to_target()
 
-                 if bess_delta_kwh > 0.0:
-                     # Deficit: grid supplies the missing electrical energy
-                     grid_supply_kwh += bess_delta_kwh
-                     total_electricity_consumption_kwh += bess_delta_kwh
+                # BESS correction
+                if bess:
+                    # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
+                    bess_delta_kwh = bess.force_soc_to_target()
 
-                 elif bess_delta_kwh < 0.0:
-                     # Surplus: excess electrical energy is sold back to grid
-                     grid_export_kwh += abs(bess_delta_kwh)
+                    if bess_delta_kwh > 0.0:
+                        # Deficit: grid supplies the missing electrical energy
+                        grid_supply_kwh += bess_delta_kwh
+                        total_electricity_consumption_kwh += bess_delta_kwh
 
-                 # Log the corrected SOC value (already set inside force_soc_to_target)
-                 bess_soc_kwh = bess.soc
-             # TESS correction
-             if tess:
-                 tess_delta_kwh = tess.force_soc_to_target()
-                 if tess_delta_kwh > 0.0:
-                     thermal_kwh += tess_delta_kwh
-                     # Propagate the extra demand to the active heat source
-                     if active_heat_pump:
-                         heat_pump_heat_kwh += tess_delta_kwh
-                         heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(heat_pump_heat_kwh, season_index, hour_index - 1)
-                         total_electricity_consumption_kwh += (active_heat_pump.get_electricity_demand_kwh(tess_delta_kwh, season_index, hour_index - 1))
-                     elif electric_boiler and not gas_boiler:
-                         electric_boiler_heat_kwh += tess_delta_kwh
-                         extra_elec = electric_boiler.get_electricity_demand_kwh(tess_delta_kwh)
-                         electric_boiler_electric_demand_kwh += extra_elec
-                         total_electricity_consumption_kwh += extra_elec
-                     elif gas_boiler:
-                         gas_boiler_heat_kwh += tess_delta_kwh
+                    elif bess_delta_kwh < 0.0:
+                        # Surplus: excess electrical energy is sold back to grid
+                        grid_export_kwh += abs(bess_delta_kwh)
+
+                    # Log the corrected SOC value (already set inside force_soc_to_target)
+                    bess_soc_kwh = bess.soc
+
+                # TESS correction
+                if tess:
+                    tess_delta_kwh = tess.force_soc_to_target()
+                    if tess_delta_kwh > 0.0:
+                        thermal_kwh += tess_delta_kwh
+                        # Propagate the extra demand to the active heat source
+                        if active_heat_pump:
+                            heat_pump_heat_kwh += tess_delta_kwh
+                            heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+                                heat_pump_heat_kwh, season_index, hour_index - 1
+                            )
+                            total_electricity_consumption_kwh += (
+                                active_heat_pump.get_electricity_demand_kwh(
+                                    tess_delta_kwh, season_index, hour_index - 1
+                                )
+                            )
+                        elif electric_boiler and not gas_boiler:
+                            electric_boiler_heat_kwh += tess_delta_kwh
+                            extra_elec = electric_boiler.get_electricity_demand_kwh(tess_delta_kwh)
+                            electric_boiler_electric_demand_kwh += extra_elec
+                            total_electricity_consumption_kwh += extra_elec
+                        elif gas_boiler:
+                            gas_boiler_heat_kwh += tess_delta_kwh
                     # Surplus (tess_delta_kwh < 0) is discarded; no revenue for thermal
                     # Log the corrected SOC value (already set inside force_soc_to_target)
-                 tess_soc_kwh = tess.soc
-
-             
+                    tess_soc_kwh = tess.soc
 
             # Costs
             cost_pv_capex_hour_eur = 0.0
@@ -624,7 +632,7 @@ def main() -> None:
             emissions_tess_kg = 0.0
             if tess:
                 emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh)
-            
+
             total_emissions_hour_kg = (
                 emissions_grid_kg
                 + emissions_gas_boiler_kg
@@ -737,50 +745,52 @@ def main() -> None:
         + annual_emissions_bess
         + annual_emissions_tess
     )
- #heatpump missing, because emissions are included in the grid emissions for electricity consumption; maybe adding LEOH bc of production emmsions and related to refrigerants
- #same would apply for electric boiler emissions, but they are calculated separately here for clarity
+    # heatpump missing, because emissions are included in the grid emissions for electricity consumption
+    # same would apply for electric boiler emissions, but they are calculated separately here for clarity
 
- # Write hourly results  
- write_hourly_results(OUTPUT_FILE, hourly_results)
- 
- # Generate seasonal energy diagrams
- plot_seasonal_energy_diagrams(hourly_results, components)
- 
- # Write annual results
- write_annual_results(
-     ANNUAL_OUTPUT_FILE,
-     {
-         "total_electricity_demand_kwh": round(annual_electricity_demand, 4),
-         "total_electricity_consumption_kwh": round(annual_electricity_consumption, 4),
-         "total_thermal_demand_kwh": round(annual_thermal_demand, 4),
-         "total_pv_generation_kwh": round(annual_pv_generation, 4),
-         "pv_self_consumption_fraction": round(pv_self_consumption_fraction, 4),
-         "annual_cost_pv_capex_eur": round(annual_cost_pv_capex_total, 4),
-         "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
-         "annual_cost_grid_eur": round(annual_cost_grid, 4),
-         "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
-         "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
-         "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
-         "annual_cost_bess_eur": round(annual_cost_bess, 4),
-         "annual_cost_tess_eur": round(annual_cost_tess, 4),
-         "annual_cost_total_eur": round(annual_cost_total, 4),
-         "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
-         "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
-         "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
-         "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
-         "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
-         "annual_emissions_total_kg": round(annual_emissions_total, 4),
-     },
- )
- 
- print(f"  hourly results written to: {OUTPUT_FILE}")
- print(f"  annual results written to: {ANNUAL_OUTPUT_FILE}")
+    # Build output filenames with component suffix
+    component_suffix = build_component_suffix(components)
+    output_file = BASE_DIR / "Results" / f"hourly_results_{component_suffix}.csv"
+    annual_output_file = BASE_DIR / "Results" / f"annual_results_{component_suffix}.csv"
+
+    # Write hourly results
+    write_hourly_results(output_file, hourly_results)
+
+    # Generate seasonal energy diagrams
+    plot_seasonal_energy_diagrams(hourly_results, components)
+
+    # Write annual results
+    write_annual_results(
+        annual_output_file,
+        {
+            "total_electricity_demand_kwh": round(annual_electricity_demand, 4),
+            "total_electricity_consumption_kwh": round(annual_electricity_consumption, 4),
+            "total_thermal_demand_kwh": round(annual_thermal_demand, 4),
+            "total_pv_generation_kwh": round(annual_pv_generation, 4),
+            "pv_self_consumption_fraction": round(pv_self_consumption_fraction, 4),
+            "annual_cost_pv_capex_eur": round(annual_cost_pv_capex_total, 4),
+            "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
+            "annual_cost_grid_eur": round(annual_cost_grid, 4),
+            "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
+            "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
+            "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
+            "annual_cost_bess_eur": round(annual_cost_bess, 4),
+            "annual_cost_tess_eur": round(annual_cost_tess, 4),
+            "annual_cost_total_eur": round(annual_cost_total, 4),
+            "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
+            "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
+            "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
+            "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
+            "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
+            "annual_emissions_total_kg": round(annual_emissions_total, 4),
+        },
+    )
+
+    print(f"  hourly results written to: {output_file}")
+    print(f"  annual results written to: {annual_output_file}")
 
 
-# Output file and column definitions
-OUTPUT_FILE = BASE_DIR / "Results" / "hourly_results.csv"
-ANNUAL_OUTPUT_FILE = BASE_DIR / "Results" / "annual_results.csv"
-
+# Output column definitions
 RESULT_FIELDS = [
     "season",
     "hour",
