@@ -169,28 +169,56 @@ def write_annual_results(path: Path, summary: dict) -> None:
         writer.writeheader()
         writer.writerow(summary)
 
-def plot_seasonal_energy_diagrams(hourly_results: list[dict]) -> None:
+def build_component_suffix(components: dict) -> str:
+    # Build a short filename suffix from enabled component abbreviations.
+    abbrevs = []
+    if "pv" in components:
+        abbrevs.append("pv")
+    if "heat_pump_air" in components:
+        abbrevs.append("hpa")
+    if "heat_pump_ground" in components:
+        abbrevs.append("hpg")
+    if "gas_boiler" in components:
+        abbrevs.append("gb")
+    if "electric_boiler" in components:
+        abbrevs.append("eb")
+    if "bess" in components:
+        abbrevs.append("bess")
+    if "tess" in components:
+        abbrevs.append("tess")
+    return "_".join(abbrevs) if abbrevs else "base"
+
+def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) -> None:
     #Generate and save electrical and thermal energy diagrams for each season.
 
     season_order = ["Winter", "Spring", "Summer", "Autumn"]
-    
+    component_suffix = build_component_suffix(components)
+
     electric_cols = [
-    "electricity_demand_kwh",
-    "total_electricity_consumption_kwh",
-    "pv_output_kwh",
-    "grid_supply_kwh",
-    "grid_export_kwh",
-    "heat_pump_electric_demand_kwh",
-    "electric_boiler_electric_demand_kwh",
-    "bess_soc_kwh",
+        "electricity_demand_kwh",
+        "total_electricity_consumption_kwh",
+        "grid_supply_kwh",
+        "grid_export_kwh",
     ]
-    thermal_cols = [
-    "thermal_demand_kwh",
-    "heat_pump_heat_kwh",
-    "gas_boiler_heat_kwh",
-    "electric_boiler_heat_kwh",
-    "tess_soc_kwh",
-    ]
+    if "pv" in components:
+        electric_cols.append("pv_output_kwh")
+    if "heat_pump_air" in components or "heat_pump_ground" in components:
+        electric_cols.append("heat_pump_electric_demand_kwh")
+    if "electric_boiler" in components:
+        electric_cols.append("electric_boiler_electric_demand_kwh")
+    if "bess" in components:
+        electric_cols.append("bess_soc_kwh")
+
+    thermal_cols = ["thermal_demand_kwh"]
+    if "heat_pump_air" in components or "heat_pump_ground" in components:
+        thermal_cols.append("heat_pump_heat_kwh")
+    if "gas_boiler" in components:
+        thermal_cols.append("gas_boiler_heat_kwh")
+    if "electric_boiler" in components:
+        thermal_cols.append("electric_boiler_heat_kwh")
+    if "tess" in components:
+        thermal_cols.append("tess_soc_kwh")
+
     legend_labels = {
     #electricity energy diagram labels
     "electricity_demand_kwh": "Demand",
@@ -253,11 +281,11 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict]) -> None:
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        OUTPUT_FILE = BASE_DIR / "Results" / f"{season_slug}_electrical_energy.png"
+        el_output = BASE_DIR / "Results" / f"{season_slug}_el_{component_suffix}.png"
         fig.tight_layout()
-        fig.savefig(OUTPUT_FILE, dpi=300, bbox_inches="tight")
+        fig.savefig(el_output, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"  diagram saved: {OUTPUT_FILE}")
+        print(f"  diagram saved: {el_output}")
 
         # Thermal energy diagram
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -276,11 +304,11 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict]) -> None:
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        OUTPUT_FILE = BASE_DIR / "Results" / f"{season_slug}_thermal_energy.png"
+        th_output = BASE_DIR / "Results" / f"{season_slug}_th_{component_suffix}.png"
         fig.tight_layout()
-        fig.savefig(OUTPUT_FILE, dpi=300, bbox_inches="tight")
+        fig.savefig(th_output, dpi=300, bbox_inches="tight")
         plt.close(fig)
-        print(f"  diagram saved: {OUTPUT_FILE}")
+        print(f"  diagram saved: {th_output}")
 
 def main() -> None:
     # Load component parameters and instantiate only enabled components
@@ -709,44 +737,44 @@ def main() -> None:
         + annual_emissions_bess
         + annual_emissions_tess
     )
-#heatpump missing, bc emissions are included in the grid emissions for electricity consumption; maybe adding LEOH bc of production emmsions and related to refrigerants
-#same would apply for electric boiler emissions, but they are calculated separately here for clarity
+ #heatpump missing, because emissions are included in the grid emissions for electricity consumption; maybe adding LEOH bc of production emmsions and related to refrigerants
+ #same would apply for electric boiler emissions, but they are calculated separately here for clarity
 
-    # Write hourly results
-    write_hourly_results(OUTPUT_FILE, hourly_results)
-
-# Generate seasonal energy diagrams
-    plot_seasonal_energy_diagrams(hourly_results)
-
-    # Write annual results
-    write_annual_results(
-        ANNUAL_OUTPUT_FILE,
-        {
-            "total_electricity_demand_kwh": round(annual_electricity_demand, 4),
-            "total_electricity_consumption_kwh": round(annual_electricity_consumption, 4),
-            "total_thermal_demand_kwh": round(annual_thermal_demand, 4),
-            "total_pv_generation_kwh": round(annual_pv_generation, 4),
-            "pv_self_consumption_fraction": round(pv_self_consumption_fraction, 4),
-            "annual_cost_pv_capex_eur": round(annual_cost_pv_capex_total, 4),
-            "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
-            "annual_cost_grid_eur": round(annual_cost_grid, 4),
-            "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
-            "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
-            "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
-            "annual_cost_bess_eur": round(annual_cost_bess, 4),
-            "annual_cost_tess_eur": round(annual_cost_tess, 4),
-            "annual_cost_total_eur": round(annual_cost_total, 4),
-            "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
-            "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
-            "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
-            "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
-            "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
-            "annual_emissions_total_kg": round(annual_emissions_total, 4),
-        },
-    )
-
-    print(f"  hourly results written to: {OUTPUT_FILE}")
-    print(f"  annual results written to: {ANNUAL_OUTPUT_FILE}")
+ # Write hourly results  
+ write_hourly_results(OUTPUT_FILE, hourly_results)
+ 
+ # Generate seasonal energy diagrams
+ plot_seasonal_energy_diagrams(hourly_results, components)
+ 
+ # Write annual results
+ write_annual_results(
+     ANNUAL_OUTPUT_FILE,
+     {
+         "total_electricity_demand_kwh": round(annual_electricity_demand, 4),
+         "total_electricity_consumption_kwh": round(annual_electricity_consumption, 4),
+         "total_thermal_demand_kwh": round(annual_thermal_demand, 4),
+         "total_pv_generation_kwh": round(annual_pv_generation, 4),
+         "pv_self_consumption_fraction": round(pv_self_consumption_fraction, 4),
+         "annual_cost_pv_capex_eur": round(annual_cost_pv_capex_total, 4),
+         "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
+         "annual_cost_grid_eur": round(annual_cost_grid, 4),
+         "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
+         "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
+         "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
+         "annual_cost_bess_eur": round(annual_cost_bess, 4),
+         "annual_cost_tess_eur": round(annual_cost_tess, 4),
+         "annual_cost_total_eur": round(annual_cost_total, 4),
+         "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
+         "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
+         "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
+         "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
+         "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
+         "annual_emissions_total_kg": round(annual_emissions_total, 4),
+     },
+ )
+ 
+ print(f"  hourly results written to: {OUTPUT_FILE}")
+ print(f"  annual results written to: {ANNUAL_OUTPUT_FILE}")
 
 
 # Output file and column definitions
