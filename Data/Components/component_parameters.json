@@ -28,13 +28,13 @@
     "emission_factor_kg_per_kwh": 0.02
   },
   "electric_boiler": {
-    "enabled": true,
+    "enabled": false,
     "efficiency": 0.99,
     "lcoh_eur_per_kwh": 0.15,
     "emission_factor_kg_per_kwh": 0.0
   },
   "heat_pump_air": {
-    "enabled": false,
+    "enabled": true,
     "lcoh_eur_per_kwh": 0.135,
     "emission_factor_kg_per_kwh": 0.0
   },
@@ -60,7 +60,7 @@
     "CO2eq_BES_annual": 27.388
   },
   "TESS": {
-    "enabled": false,
+    "enabled": true,
     "E_TESS_cap": 22.5,
     "sigma_TESS": 0.0006,
     "eta_PHE": 0.9,
