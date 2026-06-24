@@ -1,6 +1,7 @@
 from pathlib import Path
 import csv
 import json
+import os
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend, safe for scripts without a display
 import matplotlib.pyplot as plt
@@ -155,6 +156,7 @@ def write_annual_results(path: Path, summary: dict) -> None:
         "annual_cost_heat_pump_eur",
         "annual_cost_bess_eur",
         "annual_cost_tess_eur",
+        "annual_revenue_grid_eur",
         "annual_cost_total_eur",
         "annual_emissions_grid_kg",
         "annual_emissions_gas_boiler_kg",
@@ -188,6 +190,18 @@ def build_component_suffix(components: dict) -> str:
     if "tess" in components:
         abbrevs.append("tess")
     return "_".join(abbrevs) if abbrevs else "base"
+
+
+def remove_existing_png_figures(figures_dir: Path) -> None:
+    # Remove all existing .png files from the Figures output directory.
+    if not figures_dir.exists():
+        return
+    for png_file in figures_dir.glob("*.png"):
+        try:
+            os.remove(png_file)
+            print(f"  removed old figure: {png_file}")
+        except OSError as exc:
+            print(f"  warning: could not remove {png_file}: {exc}")
 
 
 def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) -> None:
@@ -283,9 +297,9 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        el_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_el_{component_suffix}.png"
+        el_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_el_{component_suffix}.pdf"
         fig.tight_layout()
-        fig.savefig(el_output, dpi=300, bbox_inches="tight")
+        fig.savefig(el_output, bbox_inches="tight")
         plt.close(fig)
         print(f"  diagram saved: {el_output}")
 
@@ -306,9 +320,9 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         ax.set_xticks(range(1, 25))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
-        th_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_th_{component_suffix}.png"
+        th_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_th_{component_suffix}.pdf"
         fig.tight_layout()
-        fig.savefig(th_output, dpi=300, bbox_inches="tight")
+        fig.savefig(th_output, bbox_inches="tight")
         plt.close(fig)
         print(f"  diagram saved: {th_output}")
 
@@ -318,6 +332,10 @@ def main() -> None:
     component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     components = apply_component_parameters(component_config)
     annualization_factor = component_config["annualization"]["factor"]
+
+    # Remove existing .png figures before generating new .pdf outputs
+    figures_dir = BASE_DIR / "Results" / "Figures"
+    remove_existing_png_figures(figures_dir)
 
     # Extract enabled components
     grid = components.get("grid")
@@ -339,6 +357,7 @@ def main() -> None:
     total_cost_pv_capex = 0.0
     total_cost_pv_om = 0.0
     total_cost_grid = 0.0
+    total_revenue_grid = 0.0
     total_cost_gas_boiler = 0.0
     total_cost_electric_boiler = 0.0
     total_cost_heat_pump = 0.0
@@ -580,6 +599,7 @@ def main() -> None:
             grid_revenue_eur = 0.0
             if grid:
                 cost_grid_eur = grid.get_cost_eur(grid_supply_kwh)
+                # Revenue from selling surplus electricity to the grid at sell_price_eur_per_kwh
                 grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
 
             cost_gas_boiler_eur = 0.0
@@ -651,6 +671,7 @@ def main() -> None:
             total_cost_pv_capex += cost_pv_capex_hour_eur
             total_cost_pv_om += cost_pv_om_eur
             total_cost_grid += cost_grid_eur
+            total_revenue_grid += grid_revenue_eur
             total_cost_gas_boiler += cost_gas_boiler_eur
             total_cost_electric_boiler += cost_electric_boiler_eur
             total_cost_heat_pump += cost_heat_pump_eur
@@ -717,6 +738,7 @@ def main() -> None:
     annual_cost_pv_capex = total_cost_pv_capex * annualization_factor
     annual_cost_pv_om = total_cost_pv_om * annualization_factor
     annual_cost_grid = total_cost_grid * annualization_factor
+    annual_revenue_grid = total_revenue_grid * annualization_factor
     annual_cost_gas_boiler = total_cost_gas_boiler * annualization_factor
     annual_cost_electric_boiler = total_cost_electric_boiler * annualization_factor
     total_cost_heat_pump = total_cost_heat_pump * annualization_factor
@@ -726,6 +748,7 @@ def main() -> None:
         annual_cost_pv_capex_total
         + annual_cost_pv_om
         + annual_cost_grid
+        - annual_revenue_grid
         + annual_cost_gas_boiler
         + annual_cost_electric_boiler
         + total_cost_heat_pump
@@ -776,6 +799,7 @@ def main() -> None:
             "annual_cost_heat_pump_eur": round(total_cost_heat_pump, 4),
             "annual_cost_bess_eur": round(annual_cost_bess, 4),
             "annual_cost_tess_eur": round(annual_cost_tess, 4),
+            "annual_revenue_grid_eur": round(annual_revenue_grid, 4),
             "annual_cost_total_eur": round(annual_cost_total, 4),
             "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
             "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
