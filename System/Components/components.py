@@ -2,8 +2,6 @@ from pathlib import Path
 import csv
 import json
 
-# Load component parameters from Data/Components/component_parameters.json so
-# values are managed centrally and changes there propagate automatically.
 _BASE_DIR = Path(__file__).resolve().parent.parent.parent
 _COMPONENT_PARAMETERS_FILE = _BASE_DIR / "Data" / "Components" / "component_parameters.json"
 try:
@@ -52,11 +50,6 @@ def _get_heat_pump_cop(series: list[list[float]], season_index: int, hour_index:
     return max(0.0, season_data[hour_index])
 
 
-# Utility grid component
-# Parameters (in component_parameters.json -> "utility_grid"):
-# - electricity_price_eur_per_kwh: €/kWh, electricity price from utility grid
-# - sell_price_eur_per_kwh: €/kWh, price received when selling surplus electricity
-# - emission_factor_kg_per_kwh: kg CO2/kWh, emissions from grid electricity
 class UtilityGrid:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("utility_grid", {})
@@ -83,26 +76,11 @@ class UtilityGrid:
         return electricity_kwh * self.emission_factor_kg_per_kwh
 
 
-# PV system component
-# Parameters (in component_parameters.json -> "pv_system"):
-# - i_stc_w_m2: W/m², STC irradiance
-# - t_stc_c: °C, STC cell temperature
-# - i_ref_w_m2: W/m², reference irradiance for temperature model
-# - t_ref_c: °C, reference ambient temperature
-# - t_nom_c: °C, Nominal Module Operating Temperature (NOCT)
-# - beta_per_c: per °C, temperature coefficient
-# - panel_area_m2: m², area per panel
-# - panels_per_household: number of panels per household
-# - power_density_w_m2: W/m², power density of panel
-# - annualized_capital_cost_per_panel_eur: €/year, annualized capital cost per panel
-# - o_and_m_cost_per_kwh_eur: €/kWh, O&M cost per kWh
 class PVSystem:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("pv_system", {})
-        # Require explicit enabling in the JSON file
         self.enabled = cfg.get("enabled", False)
         if not self.enabled:
-            # Neutral fallbacks
             self.i_stc = 1000.0
             self.t_stc = 25.0
             self.i_ref = 800.0
@@ -149,10 +127,6 @@ class PVSystem:
         return pv_output_kwh * self.om_cost_per_kwh
 
 
-# Gas boiler component
-# Parameters (in component_parameters.json -> "gas_boiler"):
-# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
-# - emission_factor_kg_per_kwh: kg CO2/kWh, emissions from gas combustion
 class GasBoiler:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("gas_boiler", {})
@@ -174,11 +148,6 @@ class GasBoiler:
         return thermal_kwh * self.emission_factor_kg_per_kwh
 
 
-# Electric boiler component
-# Parameters (in component_parameters.json -> "electric_boiler"):
-# - efficiency: conversion efficiency from electricity to heat (0-1)
-# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat (additionally to the electricity cost)
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
 class ElectricBoiler:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("electric_boiler", {})
@@ -205,10 +174,6 @@ class ElectricBoiler:
         return thermal_kwh * self.emission_factor_kg_per_kwh
 
 
-# Heat pump air-source component
-# Parameters (in component_parameters.json -> "heat_pump_air"):
-# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
 class HeatPumpAir:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_air", {})
@@ -226,27 +191,19 @@ class HeatPumpAir:
         self.cop_series = _HEAT_COP_SERIES["air"]
 
     def get_cop(self, season_index: int, hour_index: int) -> float:
-        if not self.enabled:
-            return 0.0
         return _get_heat_pump_cop(self.cop_series, season_index, hour_index)
 
     def get_electricity_demand_kwh(self, thermal_kwh: float, season_index: int, hour_index: int) -> float:
-        if not self.enabled or thermal_kwh <= 0.0:
-            return 0.0
         cop = self.get_cop(season_index, hour_index)
-        return thermal_kwh / cop if cop > 0.0 else 0.0
+        return thermal_kwh / cop if cop > 0 else 0.0
 
     def get_cost_eur(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.lcoh_eur_per_kwh if self.enabled else 0.0
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return 0.0
+        return thermal_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
 
 
-# Heat pump ground-source component
-# Parameters (in component_parameters.json -> "heat_pump_ground"):
-# - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
 class HeatPumpGround:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_ground", {})
@@ -264,162 +221,57 @@ class HeatPumpGround:
         self.cop_series = _HEAT_COP_SERIES["ground"]
 
     def get_cop(self, season_index: int, hour_index: int) -> float:
-        if not self.enabled:
-            return 0.0
         return _get_heat_pump_cop(self.cop_series, season_index, hour_index)
 
     def get_electricity_demand_kwh(self, thermal_kwh: float, season_index: int, hour_index: int) -> float:
-        if not self.enabled or thermal_kwh <= 0.0:
-            return 0.0
         cop = self.get_cop(season_index, hour_index)
-        return thermal_kwh / cop if cop > 0.0 else 0.0
+        return thermal_kwh / cop if cop > 0 else 0.0
 
     def get_cost_eur(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.lcoh_eur_per_kwh if self.enabled else 0.0
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return 0.0
+        return thermal_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
 
 
-# Battery energy storage system component
-# Parameters (in component_parameters.json -> "BESS"):
-# - sigma_BES: self-discharge rate per timestep
-# - eta_BES_char: charging efficiency
-# - eta_BES_disc: discharging efficiency
-# - SOC_BES_init: SOC reset fraction at midnight (00:00) each day
-# - SOC_BES_min: minimum SOC fraction
-# - SOC_BES_max: maximum SOC fraction
-# - E_BES_cap: usable energy capacity in kWh
-# - P_BES_max: maximum charge/discharge power in kW
-# - LCOS: levelized cost of storage in €/kWh discharged
-# - LEOS: lifecycle emissions intensity in kgCO2eq/kWh
-# - CO2eq_BES: total lifecycle emissions in kgCO2eq
-# - lifetime_BES: lifetime in years
-# - CO2eq_BES_annual: annualized lifecycle emissions in kgCO2eq/year
 class BatteryStorage:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("BESS", {})
         self.enabled = cfg.get("enabled", False)
         if not self.enabled:
-            self.sigma = 0.0
+            self.E_cap = 0.0
+            self.soc_init_frac = 0.5
+            self.soc = 0.0
             self.eta_char = 1.0
             self.eta_disc = 1.0
-            self.soc_init = 0.0
-            self.soc_min = 0.0
-            self.soc_max = 1.0
-            self.E_cap = 0.0
+            self.sigma = 0.0
             self.P_max = 0.0
             self.LCOS = 0.0
-            self.LEOS = 0.0
-            self.CO2eq_BES = 0.0
-            self.lifetime = 0
             self.CO2eq_BES_annual = 0.0
-            self.soc = 0.0
             return
         try:
-            self.sigma = cfg["sigma_BES"]
-            self.eta_char = cfg["eta_BES_char"]
-            self.eta_disc = cfg["eta_BES_disc"]
-            self.soc_init = cfg["SOC_BES_init"]
-            self.soc_min = cfg["SOC_BES_min"]
-            self.soc_max = cfg["SOC_BES_max"]
-            self.E_cap = cfg["E_BES_cap"]
-            self.P_max = cfg["P_BES_max"]
-            self.LCOS = cfg["LCOS"]
-            self.LEOS = cfg["LEOS"]
-            self.CO2eq_BES = cfg["CO2eq_BES"]
-            self.lifetime = cfg["lifetime_BES"]
-            self.CO2eq_BES_annual = cfg["CO2eq_BES_annual"]
-            self.soc = self.soc_init * self.E_cap
+            self.E_cap = cfg["E_cap_kwh"]
+            self.soc_init_frac = cfg.get("soc_init_frac", 0.5)
+            self.eta_char = cfg["eta_char"]
+            self.eta_disc = cfg["eta_disc"]
+            self.sigma = cfg.get("sigma_per_hour", 0.0)
+            self.P_max = cfg["P_max_kw"]
+            self.LCOS = cfg["lcos_eur_per_kwh"]
+            self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual_kg", 0.0)
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
+        self.soc = self.E_cap * self.soc_init_frac
 
     def reset_soc(self) -> None:
-        """Reset SOC to the initial fraction at the start of each day (00:00)."""
-        self.soc = self.soc_init * self.E_cap
+        # reset SOC to initial fraction
+        self.soc = self.E_cap * self.soc_init_frac
 
     def get_soc_target_kwh(self) -> float:
-        """Target SOC in kWh to restore at end of day (23:00)."""
-        return self.soc_init * self.E_cap
+        # target SOC in kWh for end-of-day restoration
+        return self.E_cap * self.soc_init_frac
 
     def force_soc_to_target(self) -> float:
-        """Force SOC to target at end of day.
-        Returns signed delta: positive = deficit (buy from grid), negative = surplus (sell to grid).
-        """
-        target = self.get_soc_target_kwh()
-        delta = target - self.soc
-        self.soc = target
-        return delta
-
-    def get_charge_energy_input(self, power_kw: float) -> float:
-        return self.eta_char * max(0.0, min(power_kw, self.P_max))
-
-    def get_discharge_energy_output(self, power_kw: float) -> float:
-        return max(0.0, min(power_kw, self.P_max)) / self.eta_disc
-
-    def available_charge_capacity_kwh(self) -> float:
-        return max(0.0, self.soc_max * self.E_cap - self.soc)
-
-    def available_discharge_capacity_kwh(self) -> float:
-        return max(0.0, self.soc - self.soc_min * self.E_cap)
-
-    def apply_self_discharge(self) -> None:
-        self.soc = self.soc * (1.0 - self.sigma)
-
-    def clamp_soc(self) -> None:
-        self.soc = min(max(self.soc, self.soc_min * self.E_cap), self.soc_max * self.E_cap)
-
-    def get_cost_eur(self, discharge_kwh: float) -> float:
-        """Throughput-based cost in EUR: LCOS [€/kWh] × energy discharged [kWh].
-        Consistent with the TESS cost model (LCOH × kWh dispatched).
-        """
-        return discharge_kwh * self.LCOS if self.enabled else 0.0
-
-
-# Thermal energy storage system component
-# Parameters (in component_parameters.json -> "TESS"):
-# - E_TESS_cap: kWh, usable thermal storage capacity
-# - sigma_TESS: self-discharge rate per timestep
-# - eta_PHE: plate heat exchanger efficiency
-# - SOC_TESS_12am: SOC reset fraction at midnight (00:00) each day
-# - LCOH_TESS: €/kWh, levelized cost of heat dispatched
-# - LEOH_TESS: kgCO2eq/kWh, lifecycle emissions intensity
-class ThermalEnergyStorage:
-    def __init__(self, config: dict | None = None):
-        cfg = config if config is not None else COMPONENT_PARAMETERS.get("TESS", {})
-        self.enabled = cfg.get("enabled", False)
-        if not self.enabled:
-            self.sigma = 0.0
-            self.eta_phe = 1.0
-            self.soc_init = 0.0
-            self.E_cap = 0.0
-            self.lcoh = 0.0
-            self.leoh = 0.0
-            self.soc = 0.0
-            return
-        try:
-            self.sigma = cfg["sigma_TESS"]
-            self.eta_phe = cfg["eta_PHE"]
-            self.soc_init = cfg["SOC_TESS_12am"]
-            self.E_cap = cfg["E_TESS_cap"]
-            self.lcoh = cfg["LCOH_TESS"]
-            self.leoh = cfg["LEOH_TESS"]
-        except KeyError as e:
-            raise ValueError(f"Missing required parameter {e.args[0]!r} for ThermalEnergyStorage in component_parameters.json")
-        self.soc = self.soc_init * self.E_cap
-
-    def reset_soc(self) -> None:
-        """Reset SOC to the initial fraction at the start of each day (00:00)."""
-        self.soc = self.soc_init * self.E_cap
-
-    def get_soc_target_kwh(self) -> float:
-        """Target SOC in kWh to restore at end of day (23:00)."""
-        return self.soc_init * self.E_cap
-
-    def force_soc_to_target(self) -> float:
-        """Force SOC to target at end of day.
-        Returns signed delta: positive = deficit (generate heat), negative = surplus (discard).
-        """
+        # force SOC to target; returns signed delta (+ = draw from grid, - = export)
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
@@ -437,34 +289,79 @@ class ThermalEnergyStorage:
     def clamp_soc(self) -> None:
         self.soc = min(max(self.soc, 0.0), self.E_cap)
 
+    def get_charge_energy_input(self, charge_kwh: float) -> float:
+        return charge_kwh / self.eta_char if self.eta_char else 0.0
+
+    def get_discharge_energy_output(self, discharge_kwh: float) -> float:
+        return discharge_kwh * self.eta_disc
+
+    def get_cost_eur(self, charge_kwh: float) -> float:
+        # LCOS [€/kWh] x energy charged into battery
+        return charge_kwh * self.LCOS if self.enabled else 0.0
+
+
+class ThermalEnergyStorage:
+    def __init__(self, config: dict | None = None):
+        cfg = config if config is not None else COMPONENT_PARAMETERS.get("TESS", {})
+        self.enabled = cfg.get("enabled", False)
+        if not self.enabled:
+            self.E_cap = 0.0
+            self.soc_init_frac = 0.5
+            self.soc = 0.0
+            self.eta_char = 1.0
+            self.eta_disc = 1.0
+            self.sigma = 0.0
+            self.lcoh = 0.0
+            self.emission_factor_kg_per_kwh = 0.0
+            return
+        try:
+            self.E_cap = cfg["E_cap_kwh"]
+            self.soc_init_frac = cfg.get("soc_init_frac", 0.5)
+            self.eta_char = cfg.get("eta_char", 1.0)
+            self.eta_disc = cfg.get("eta_disc", 1.0)
+            self.sigma = cfg.get("sigma_per_hour", 0.0)
+            self.lcoh = cfg["lcoh_eur_per_kwh"]
+            self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
+        except KeyError as e:
+            raise ValueError(f"Missing required parameter {e.args[0]!r} for ThermalEnergyStorage in component_parameters.json")
+        self.soc = self.E_cap * self.soc_init_frac
+
+    def reset_soc(self) -> None:
+        # reset SOC to initial fraction
+        self.soc = self.E_cap * self.soc_init_frac
+
+    def get_soc_target_kwh(self) -> float:
+        # target SOC in kWh for end-of-day restoration
+        return self.E_cap * self.soc_init_frac
+
+    def force_soc_to_target(self) -> float:
+        # force SOC to target; returns signed delta (+ = draw from grid, - = export)
+        target = self.get_soc_target_kwh()
+        delta = target - self.soc
+        self.soc = target
+        return delta
+
+    def available_charge_capacity_kwh(self) -> float:
+        return max(0.0, self.E_cap - self.soc)
+
     def get_discharge_for_demand(self, thermal_demand_kwh: float) -> float:
-        if not self.enabled or thermal_demand_kwh <= 0.0:
-            return 0.0
-        return min(thermal_demand_kwh / self.eta_phe, self.available_discharge_capacity_kwh())
+        available = self.soc * self.eta_disc
+        return min(thermal_demand_kwh, available)
 
-    def get_heat_from_discharge(self, q_tess_out: float) -> float:
-        return max(0.0, q_tess_out * self.eta_phe)
+    def get_heat_from_discharge(self, discharge_kwh: float) -> float:
+        return discharge_kwh
 
-    def get_charge_from_heat_source(self, thermal_input_kwh: float) -> float:
-        if not self.enabled or thermal_input_kwh <= 0.0:
-            return 0.0
-        return min(thermal_input_kwh, self.available_charge_capacity_kwh())
-
-    def dispatch_for_demand(self, thermal_demand_kwh: float) -> tuple[float, float, float]:
-        q_tess_out = self.get_discharge_for_demand(thermal_demand_kwh)
-        heat_supplied = self.get_heat_from_discharge(q_tess_out)
-        remaining_demand = max(0.0, thermal_demand_kwh - heat_supplied)
-        self.update_state(q_tess_in=0.0, q_tess_out=q_tess_out)
-        return q_tess_out, heat_supplied, remaining_demand
+    def get_charge_from_heat_source(self, heat_available_kwh: float) -> float:
+        capacity = self.available_charge_capacity_kwh()
+        return min(heat_available_kwh * self.eta_char, capacity)
 
     def update_state(self, q_tess_in: float, q_tess_out: float) -> None:
-        if not self.enabled:
-            return
-        self.soc = self.soc * (1.0 - self.sigma) + q_tess_in - q_tess_out
-        self.clamp_soc()
+        self.soc += q_tess_in * self.eta_char - q_tess_out / self.eta_disc
+        self.soc = max(0.0, min(self.soc, self.E_cap))
+        self.soc *= (1.0 - self.sigma)
 
     def get_cost_eur(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.lcoh if self.enabled else 0.0
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.leoh if self.enabled else 0.0
+        return thermal_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
