@@ -55,6 +55,7 @@ def _get_heat_pump_cop(series: list[list[float]], season_index: int, hour_index:
 # Utility grid component
 # Parameters (in component_parameters.json -> "utility_grid"):
 # - electricity_price_eur_per_kwh: €/kWh, electricity price from utility grid
+# - sell_price_eur_per_kwh: €/kWh, price received when selling surplus electricity
 # - emission_factor_kg_per_kwh: kg CO2/kWh, emissions from grid electricity
 class UtilityGrid:
     def __init__(self, config: dict | None = None):
@@ -177,7 +178,7 @@ class GasBoiler:
 # Parameters (in component_parameters.json -> "electric_boiler"):
 # - efficiency: conversion efficiency from electricity to heat (0-1)
 # - lcoh_eur_per_kwh: €/kWh, levelized cost of heat (additionally to the electricity cost)
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions (indirect emissions from electric boiler production might get added later))
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
 class ElectricBoiler:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("electric_boiler", {})
@@ -207,7 +208,7 @@ class ElectricBoiler:
 # Heat pump air-source component
 # Parameters (in component_parameters.json -> "heat_pump_air"):
 # - lcoh_eur_per_kwh: €/kWh, levelized cost of heat
-# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions (no direct emissions; indirect maybe added later; for now only due to added electricity consumption taken into account)
+# - emission_factor_kg_per_kwh: kg CO2/kWh, direct emissions
 class HeatPumpAir:
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_air", {})
@@ -285,12 +286,12 @@ class HeatPumpGround:
 # - sigma_BES: self-discharge rate per timestep
 # - eta_BES_char: charging efficiency
 # - eta_BES_disc: discharging efficiency
-# - SOC_BES_init: SOC reset fraction at midnight each day
+# - SOC_BES_init: SOC reset fraction at midnight (00:00) each day
 # - SOC_BES_min: minimum SOC fraction
 # - SOC_BES_max: maximum SOC fraction
 # - E_BES_cap: usable energy capacity in kWh
 # - P_BES_max: maximum charge/discharge power in kW
-# - LCOS: levelized cost of storage capacity in €/kWh
+# - LCOS: levelized cost of storage in €/kWh discharged
 # - LEOS: lifecycle emissions intensity in kgCO2eq/kWh
 # - CO2eq_BES: total lifecycle emissions in kgCO2eq
 # - lifetime_BES: lifetime in years
@@ -334,14 +335,17 @@ class BatteryStorage:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
 
     def reset_soc(self) -> None:
+        """Reset SOC to the initial fraction at the start of each day (00:00)."""
         self.soc = self.soc_init * self.E_cap
 
     def get_soc_target_kwh(self) -> float:
-        # Target SOC in kWh to restore at end of day
+        """Target SOC in kWh to restore at end of day (23:00)."""
         return self.soc_init * self.E_cap
 
     def force_soc_to_target(self) -> float:
-        # Returns signed delta: positive = deficit (buy from grid), negative = surplus (sell to grid)
+        """Force SOC to target at end of day.
+        Returns signed delta: positive = deficit (buy from grid), negative = surplus (sell to grid).
+        """
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
@@ -365,14 +369,20 @@ class BatteryStorage:
     def clamp_soc(self) -> None:
         self.soc = min(max(self.soc, self.soc_min * self.E_cap), self.soc_max * self.E_cap)
 
+    def get_cost_eur(self, discharge_kwh: float) -> float:
+        """Throughput-based cost in EUR: LCOS [€/kWh] × energy discharged [kWh].
+        Consistent with the TESS cost model (LCOH × kWh dispatched).
+        """
+        return discharge_kwh * self.LCOS if self.enabled else 0.0
+
 
 # Thermal energy storage system component
 # Parameters (in component_parameters.json -> "TESS"):
 # - E_TESS_cap: kWh, usable thermal storage capacity
 # - sigma_TESS: self-discharge rate per timestep
 # - eta_PHE: plate heat exchanger efficiency
-# - SOC_TESS_12am: SOC reset fraction at midnight each day
-# - LCOH_TESS: €/kWh, levelized cost of heat
+# - SOC_TESS_12am: SOC reset fraction at midnight (00:00) each day
+# - LCOH_TESS: €/kWh, levelized cost of heat dispatched
 # - LEOH_TESS: kgCO2eq/kWh, lifecycle emissions intensity
 class ThermalEnergyStorage:
     def __init__(self, config: dict | None = None):
@@ -399,14 +409,17 @@ class ThermalEnergyStorage:
         self.soc = self.soc_init * self.E_cap
 
     def reset_soc(self) -> None:
+        """Reset SOC to the initial fraction at the start of each day (00:00)."""
         self.soc = self.soc_init * self.E_cap
 
     def get_soc_target_kwh(self) -> float:
-        # Target SOC in kWh to restore at end of day
+        """Target SOC in kWh to restore at end of day (23:00)."""
         return self.soc_init * self.E_cap
-    
+
     def force_soc_to_target(self) -> float:
-        # Returns signed delta: positive = deficit (generate heat), negative = surplus (discard)
+        """Force SOC to target at end of day.
+        Returns signed delta: positive = deficit (generate heat), negative = surplus (discard).
+        """
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
@@ -455,4 +468,3 @@ class ThermalEnergyStorage:
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
         return thermal_kwh * self.leoh if self.enabled else 0.0
-

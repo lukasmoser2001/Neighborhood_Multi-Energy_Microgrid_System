@@ -206,6 +206,7 @@ def remove_existing_png_figures(figures_dir: Path) -> None:
 
 def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) -> None:
     # Generate and save electrical and thermal energy diagrams for each season.
+    # The x-axis shows hours 0-23 representing 00:00 to 23:00.
 
     season_order = ["Winter", "Spring", "Summer", "Autumn"]
     component_suffix = build_component_suffix(components)
@@ -277,6 +278,7 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
         if not season_rows:
             continue
 
+        # hour column is now 0-23 (00:00 to 23:00)
         hours = [r["hour"] for r in season_rows]
         season_slug = season.lower()
 
@@ -290,11 +292,11 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
                 color=colors[col],
                 linewidth=2,
             )
-        ax.set_title(f"{season} — Electrical Energy")
-        ax.set_xlabel("Time [h]")
+        ax.set_title(f"{season} \u2014 Electrical Energy")
+        ax.set_xlabel("Hour of day [h]")
         ax.set_ylabel("Electrical energy [kWh]")
-        ax.set_xlim(1, 24)
-        ax.set_xticks(range(1, 25))
+        ax.set_xlim(0, 23)
+        ax.set_xticks(range(0, 24))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
         el_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_el_{component_suffix}.pdf"
@@ -313,11 +315,11 @@ def plot_seasonal_energy_diagrams(hourly_results: list[dict], components: dict) 
                 color=colors[col],
                 linewidth=2,
             )
-        ax.set_title(f"{season} — Thermal Energy")
-        ax.set_xlabel("Time [h]")
+        ax.set_title(f"{season} \u2014 Thermal Energy")
+        ax.set_xlabel("Hour of day [h]")
         ax.set_ylabel("Thermal energy [kWh]")
-        ax.set_xlim(1, 24)
-        ax.set_xticks(range(1, 25))
+        ax.set_xlim(0, 23)
+        ax.set_xticks(range(0, 24))
         ax.grid(True, linestyle="--", alpha=0.4)
         ax.legend()
         th_output = BASE_DIR / "Results" / "Figures" / f"{season_slug}_th_{component_suffix}.pdf"
@@ -373,7 +375,7 @@ def main() -> None:
     all_solar_data = read_solar_data(SOLAR_DATA_FILE)
 
     # Hour indices for representative days: Jan 15, Apr 15, Jul 15, Oct 15
-    # (Data starts Jan 1 00:00, so hour 336 = Jan 15, 2496 = Apr 15, etc.)
+    # Data starts Jan 1 00:00, so hour 336 = Jan 15 00:00, 2496 = Apr 15 00:00, etc.
     SEASON_HOUR_INDICES = [
         336,   # Winter (Jan 15): hours 336-359
         2496,  # Spring (Apr 15): hours 2496-2519
@@ -394,14 +396,17 @@ def main() -> None:
         end_hour = start_hour + 24
         season_solar_data = all_solar_data[start_hour:end_hour]
 
+        # hour_index runs 0..23, matching 00:00..23:00 of the representative day.
+        # SOC is reset at hour_index == 0 (start of day, 00:00).
+        # End-of-day SOC correction is applied at hour_index == 23 (last hour, 23:00).
+        # COP lookup uses hour_index directly as the row index into the heat CSV.
         for hour_index, (electricity_kwh, thermal_kwh) in enumerate(
-            zip(electricity_demand, thermal_demand), start=1
+            zip(electricity_demand, thermal_demand)
         ):
             # Get solar data for this hour
-            if hour_index - 1 < len(season_solar_data):
-                irradiance, T_amb = season_solar_data[hour_index - 1]
+            if hour_index < len(season_solar_data):
+                irradiance, T_amb = season_solar_data[hour_index]
             else:
-                # Fallback to zero if not enough data
                 irradiance, T_amb = 0.0, 20.0
 
             # Calculate PV output if PV is enabled
@@ -426,8 +431,9 @@ def main() -> None:
 
             if active_heat_pump:
                 heat_pump_heat_kwh = thermal_kwh
+                # COP lookup: hour_index is 0-based, matching the CSV row index directly
                 heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
-                    thermal_kwh, season_index, hour_index - 1
+                    thermal_kwh, season_index, hour_index
                 )
             elif electric_boiler and not gas_boiler:
                 electric_boiler_heat_kwh = thermal_kwh
@@ -437,7 +443,7 @@ def main() -> None:
                 electric_boiler_heat_kwh = thermal_kwh
 
             if tess:
-                if hour_index == 1:
+                if hour_index == 0:
                     tess.reset_soc()
 
                 tess_discharge_kwh = tess.get_discharge_for_demand(thermal_kwh)
@@ -478,8 +484,9 @@ def main() -> None:
                 )
 
             if active_heat_pump:
+                # COP lookup: hour_index is 0-based, matching the CSV row index directly
                 heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
-                    heat_pump_heat_kwh, season_index, hour_index - 1
+                    heat_pump_heat_kwh, season_index, hour_index
                 )
 
             if tess:
@@ -497,7 +504,7 @@ def main() -> None:
             bess_charge_kwh = 0.0
             bess_discharge_kwh = 0.0
             if bess:
-                if hour_index == 1:
+                if hour_index == 0:
                     bess.reset_soc()
 
                 if pv_output_kwh > total_electricity_consumption_kwh:
@@ -541,12 +548,12 @@ def main() -> None:
             pv_used_kwh = pv_output_kwh - grid_export_kwh
             bess_soc_kwh = bess.soc if bess else 0.0
 
-            # End-of-day SOC restoration at hour 24
-            if hour_index == 24:
+            # End-of-day SOC restoration at hour_index == 23 (23:00, last hour of day)
+            if hour_index == 23:
 
                 # BESS correction
                 if bess:
-                    # force_soc_to_target() internally sets bess.soc = target and returns the signed delta
+                    # force_soc_to_target() sets bess.soc = target and returns the signed delta
                     bess_delta_kwh = bess.force_soc_to_target()
 
                     if bess_delta_kwh > 0.0:
@@ -558,7 +565,6 @@ def main() -> None:
                         # Surplus: excess electrical energy is sold back to grid
                         grid_export_kwh += abs(bess_delta_kwh)
 
-                    # Log the corrected SOC value (already set inside force_soc_to_target)
                     bess_soc_kwh = bess.soc
 
                 # TESS correction
@@ -570,11 +576,11 @@ def main() -> None:
                         if active_heat_pump:
                             heat_pump_heat_kwh += tess_delta_kwh
                             heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
-                                heat_pump_heat_kwh, season_index, hour_index - 1
+                                heat_pump_heat_kwh, season_index, hour_index
                             )
                             total_electricity_consumption_kwh += (
                                 active_heat_pump.get_electricity_demand_kwh(
-                                    tess_delta_kwh, season_index, hour_index - 1
+                                    tess_delta_kwh, season_index, hour_index
                                 )
                             )
                         elif electric_boiler and not gas_boiler:
@@ -585,7 +591,6 @@ def main() -> None:
                         elif gas_boiler:
                             gas_boiler_heat_kwh += tess_delta_kwh
                     # Surplus (tess_delta_kwh < 0) is discarded; no revenue for thermal
-                    # Log the corrected SOC value (already set inside force_soc_to_target)
                     tess_soc_kwh = tess.soc
 
             # Costs
@@ -599,7 +604,7 @@ def main() -> None:
             grid_revenue_eur = 0.0
             if grid:
                 cost_grid_eur = grid.get_cost_eur(grid_supply_kwh)
-                # Revenue from selling surplus electricity to the grid at sell_price_eur_per_kwh
+                # Revenue from selling surplus electricity at sell_price_eur_per_kwh
                 grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
 
             cost_gas_boiler_eur = 0.0
@@ -614,9 +619,11 @@ def main() -> None:
             if active_heat_pump:
                 cost_heat_pump_eur = active_heat_pump.get_cost_eur(heat_pump_heat_kwh)
 
+            # BESS cost: throughput-based, LCOS [€/kWh] × energy discharged [kWh]
+            # Consistent with TESS cost model (LCOH × kWh dispatched).
             cost_bess_eur = 0.0
             if bess:
-                cost_bess_eur = bess.LCOS * bess.E_cap / (annualization_factor * 24.0)
+                cost_bess_eur = bess.get_cost_eur(bess_discharge_kwh)
 
             cost_tess_eur = 0.0
             if tess:
@@ -662,7 +669,7 @@ def main() -> None:
                 + emissions_tess_kg
             )
 
-            # Accumulate annual totals
+            # Accumulate totals across the 4 representative days
             total_electricity_demand += electricity_kwh
             total_electricity_consumption += total_electricity_consumption_kwh
             total_thermal_demand += thermal_kwh
@@ -686,7 +693,7 @@ def main() -> None:
             hourly_results.append(
                 {
                     "season": season_name,
-                    "hour": hour_index,
+                    "hour": hour_index,  # 0 = 00:00, 23 = 23:00
                     "electricity_demand_kwh": round(electricity_kwh, 4),
                     "total_electricity_consumption_kwh": round(total_electricity_consumption_kwh, 4),
                     "heat_pump_heat_kwh": round(heat_pump_heat_kwh, 4),
@@ -725,7 +732,7 @@ def main() -> None:
                 }
             )
 
-    # Calculate annual aggregates
+    # Calculate annual aggregates (4 representative days × annualization_factor)
     annual_electricity_demand = total_electricity_demand * annualization_factor
     annual_electricity_consumption = total_electricity_consumption * annualization_factor
     annual_thermal_demand = total_thermal_demand * annualization_factor
@@ -735,13 +742,13 @@ def main() -> None:
     )
 
     annual_cost_pv_capex_total = pv.capex_total_eur if pv else 0.0
-    annual_cost_pv_capex = total_cost_pv_capex * annualization_factor
     annual_cost_pv_om = total_cost_pv_om * annualization_factor
     annual_cost_grid = total_cost_grid * annualization_factor
     annual_revenue_grid = total_revenue_grid * annualization_factor
     annual_cost_gas_boiler = total_cost_gas_boiler * annualization_factor
     annual_cost_electric_boiler = total_cost_electric_boiler * annualization_factor
     total_cost_heat_pump = total_cost_heat_pump * annualization_factor
+    # BESS: annualise throughput-based cost (same approach as TESS)
     annual_cost_bess = total_cost_bess * annualization_factor
     annual_cost_tess = total_cost_tess * annualization_factor
     annual_cost_total = (
@@ -768,8 +775,7 @@ def main() -> None:
         + annual_emissions_bess
         + annual_emissions_tess
     )
-    # heatpump missing, because emissions are included in the grid emissions for electricity consumption
-    # same would apply for electric boiler emissions, but they are calculated separately here for clarity
+    # Note: heat pump electricity consumption emissions are already captured in grid emissions
 
     # Build output filenames with component suffix
     component_suffix = build_component_suffix(components)
