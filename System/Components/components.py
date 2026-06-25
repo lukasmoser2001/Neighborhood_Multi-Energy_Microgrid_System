@@ -235,6 +235,8 @@ class HeatPumpGround:
 
 
 class BatteryStorage:
+    # JSON keys used: E_BES_cap, eta_BES_char, eta_BES_disc, P_BES_max, LCOS,
+    #                 sigma_BES, SOC_BES_init, CO2eq_BES_annual
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("BESS", {})
         self.enabled = cfg.get("enabled", False)
@@ -250,28 +252,25 @@ class BatteryStorage:
             self.CO2eq_BES_annual = 0.0
             return
         try:
-            self.E_cap = cfg["E_cap_kwh"]
-            self.soc_init_frac = cfg.get("soc_init_frac", 0.5)
-            self.eta_char = cfg["eta_char"]
-            self.eta_disc = cfg["eta_disc"]
-            self.sigma = cfg.get("sigma_per_hour", 0.0)
-            self.P_max = cfg["P_max_kw"]
-            self.LCOS = cfg["lcos_eur_per_kwh"]
-            self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual_kg", 0.0)
+            self.E_cap = cfg["E_BES_cap"]
+            self.soc_init_frac = cfg.get("SOC_BES_init", 0.5)
+            self.eta_char = cfg["eta_BES_char"]
+            self.eta_disc = cfg["eta_BES_disc"]
+            self.sigma = cfg.get("sigma_BES", 0.0)
+            self.P_max = cfg["P_BES_max"]
+            self.LCOS = cfg["LCOS"]
+            self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual", 0.0)
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
         self.soc = self.E_cap * self.soc_init_frac
 
     def reset_soc(self) -> None:
-        # reset SOC to initial fraction
         self.soc = self.E_cap * self.soc_init_frac
 
     def get_soc_target_kwh(self) -> float:
-        # target SOC in kWh for end-of-day restoration
         return self.E_cap * self.soc_init_frac
 
     def force_soc_to_target(self) -> float:
-        # force SOC to target; returns signed delta (+ = draw from grid, - = export)
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
@@ -301,6 +300,8 @@ class BatteryStorage:
 
 
 class ThermalEnergyStorage:
+    # JSON keys used: E_TESS_cap, sigma_TESS, eta_PHE (charge+discharge efficiency),
+    #                 SOC_TESS_12am, LCOH_TESS, LEOH_TESS
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("TESS", {})
         self.enabled = cfg.get("enabled", False)
@@ -315,27 +316,24 @@ class ThermalEnergyStorage:
             self.emission_factor_kg_per_kwh = 0.0
             return
         try:
-            self.E_cap = cfg["E_cap_kwh"]
-            self.soc_init_frac = cfg.get("soc_init_frac", 0.5)
-            self.eta_char = cfg.get("eta_char", 1.0)
-            self.eta_disc = cfg.get("eta_disc", 1.0)
-            self.sigma = cfg.get("sigma_per_hour", 0.0)
-            self.lcoh = cfg["lcoh_eur_per_kwh"]
-            self.emission_factor_kg_per_kwh = cfg.get("emission_factor_kg_per_kwh", 0.0)
+            self.E_cap = cfg["E_TESS_cap"]
+            self.soc_init_frac = cfg.get("SOC_TESS_12am", 0.5)
+            self.eta_char = cfg.get("eta_PHE", 1.0)
+            self.eta_disc = cfg.get("eta_PHE", 1.0)
+            self.sigma = cfg.get("sigma_TESS", 0.0)
+            self.lcoh = cfg["LCOH_TESS"]
+            self.emission_factor_kg_per_kwh = cfg.get("LEOH_TESS", 0.0)
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for ThermalEnergyStorage in component_parameters.json")
         self.soc = self.E_cap * self.soc_init_frac
 
     def reset_soc(self) -> None:
-        # reset SOC to initial fraction
         self.soc = self.E_cap * self.soc_init_frac
 
     def get_soc_target_kwh(self) -> float:
-        # target SOC in kWh for end-of-day restoration
         return self.E_cap * self.soc_init_frac
 
     def force_soc_to_target(self) -> float:
-        # force SOC to target; returns signed delta (+ = draw from grid, - = export)
         target = self.get_soc_target_kwh()
         delta = target - self.soc
         self.soc = target
