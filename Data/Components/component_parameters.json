@@ -3,13 +3,11 @@
     "factor": 91.25
   },
   "utility_grid": {
-    "enabled": true,
     "electricity_price_eur_per_kwh": 0.1793,
     "sell_price_eur_per_kwh": 0.08345,
     "emission_factor_kg_per_kwh": 0.020
   },
   "pv_system": {
-    "enabled": true,
     "i_stc_w_m2": 1000.0,
     "t_stc_c": 25.0,
     "i_ref_w_m2": 800.0,
@@ -23,28 +21,23 @@
     "o_and_m_cost_per_kwh_eur": 0.01
   },
   "gas_boiler": {
-    "enabled": false,
     "lcoh_eur_per_kwh": 0.13,
     "emission_factor_kg_per_kwh": 0.02
   },
   "electric_boiler": {
-    "enabled": false,
     "efficiency": 0.99,
     "lcoh_eur_per_kwh": 0.15,
     "emission_factor_kg_per_kwh": 0.0
   },
   "heat_pump_air": {
-    "enabled": true,
     "lcoh_eur_per_kwh": 0.135,
     "emission_factor_kg_per_kwh": 0.0
   },
   "heat_pump_ground": {
-    "enabled": false,
     "lcoh_eur_per_kwh": 0.135,
     "emission_factor_kg_per_kwh": 0.0
   },
   "BESS": {
-    "enabled": true,
     "sigma_BES": 0.00003,
     "eta_BES_char": 0.945,
     "eta_BES_disc": 0.945,
@@ -60,7 +53,6 @@
     "CO2eq_BES_annual": 27.388
   },
   "TESS": {
-    "enabled": true,
     "E_TESS_cap": 22.5,
     "sigma_TESS": 0.0006,
     "eta_PHE": 0.9,
