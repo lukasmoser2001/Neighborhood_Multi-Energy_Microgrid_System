@@ -1,5 +1,5 @@
-config,annual_cost_total_eur,annual_emissions_total_kg
-eb,5579.25,370.11
-gb,2547.58,367.07
-pv_eb_bess,4757.47,288.13
-pv_hpa_bess_tess,3180.98,108.91
+config,configuration_label,annual_cost_total_eur,annual_emissions_total_kg
+A_grid_eb,A: Grid + Electric Boiler,5579.25,370.11
+B_grid_gb,B: Grid + Gas Boiler,2547.58,367.07
+C_grid_eb_pv_bess,C: Grid + Electric Boiler + PV + BESS,5399.76,284.46
+D_grid_ashp_pv_bess_tess,D: Grid + ASHP + PV + BESS + TESS,3876.63,109.39
