@@ -196,26 +196,6 @@ def write_annual_results(path: Path, summary: dict) -> None:
         writer.writerow(summary)
 
 
-def build_component_suffix(components: dict) -> str:
-    # Build a short filename suffix from enabled component abbreviations.
-    abbrevs = []
-    if "pv" in components:
-        abbrevs.append("pv")
-    if "heat_pump_air" in components:
-        abbrevs.append("hpa")
-    if "heat_pump_ground" in components:
-        abbrevs.append("hpg")
-    if "gas_boiler" in components:
-        abbrevs.append("gb")
-    if "electric_boiler" in components:
-        abbrevs.append("eb")
-    if "bess" in components:
-        abbrevs.append("bess")
-    if "tess" in components:
-        abbrevs.append("tess")
-    return "_".join(abbrevs) if abbrevs else "base"
-
-
 def remove_existing_output_files() -> None:
     # Clear all previous .pdf/.png figures and .csv tables before a fresh run.
     figures_dir = BASE_DIR / "Results" / "Figures"
@@ -251,9 +231,9 @@ def plot_seasonal_energy_diagrams(
     # Generate and save electrical and thermal energy diagrams for each season.
     # All diagrams of the same type share the same y-axis scale so that
     # configurations can be compared visually at a glance.
+    # Output filenames use config_name only — no redundant component suffix.
 
     season_order = ["Winter", "Spring", "Summer", "Autumn"]
-    component_suffix = build_component_suffix(components)
 
     electric_cols = [
         "electricity_demand_kwh",
@@ -345,7 +325,7 @@ def plot_seasonal_energy_diagrams(
         ax.legend()
         el_output = (
             BASE_DIR / "Results" / "Figures"
-            / f"{config_name}_{season_slug}_el_{component_suffix}.pdf"
+            / f"{config_name}_{season_slug}_el.pdf"
         )
         fig.tight_layout()
         fig.savefig(el_output, bbox_inches="tight")
@@ -373,7 +353,7 @@ def plot_seasonal_energy_diagrams(
         ax.legend()
         th_output = (
             BASE_DIR / "Results" / "Figures"
-            / f"{config_name}_{season_slug}_th_{component_suffix}.pdf"
+            / f"{config_name}_{season_slug}_th.pdf"
         )
         fig.tight_layout()
         fig.savefig(th_output, bbox_inches="tight")
@@ -891,11 +871,10 @@ def run_single_configuration(
         + annual_emissions_tess
     )
 
-    # Write outputs
-    component_suffix = build_component_suffix(components)
+    # Write outputs — config_name alone is sufficient for unique file identification
     output_file = (
         BASE_DIR / "Results" / "Tables"
-        / f"hourly_results_{config_name}_{component_suffix}.csv"
+        / f"hourly_results_{config_name}.csv"
     )
     annual_output_file = (
         BASE_DIR / "Results" / "Tables" / f"annual_results_{config_name}.csv"
