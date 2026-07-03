@@ -225,67 +225,93 @@ def plot_seasonal_energy_diagrams(
     components: dict,
     config_name: str,
 ) -> None:
-    # Generate and save electrical and thermal energy diagrams for each season.
-    # All diagrams of the same type share the same y-axis scale so that
-    # configurations can be compared visually at a glance.
-    # Output filenames use config_name only — no redundant component suffix.
-
     season_order = ["Winter", "Spring", "Summer", "Autumn"]
 
-    electric_cols = [
-        "electricity_demand_kwh",
-        "total_electricity_consumption_kwh",
+    bar_width = 0.6
+
+    # --- Electrical diagram column definitions ---
+    # Demand bars: base = electricity_demand_kwh, stacked extra = total - base
+    # Line series: grid import/export, PV, HP elec., EB elec., BESS charge/discharge
+    elec_line_cols = [
         "grid_supply_kwh",
         "grid_export_kwh",
     ]
     if "pv" in components:
-        electric_cols.append("pv_output_kwh")
+        elec_line_cols.append("pv_output_kwh")
     if "heat_pump_air" in components or "heat_pump_ground" in components:
-        electric_cols.append("heat_pump_electric_demand_kwh")
+        elec_line_cols.append("heat_pump_electric_demand_kwh")
     if "electric_boiler" in components:
-        electric_cols.append("electric_boiler_electric_demand_kwh")
+        elec_line_cols.append("electric_boiler_electric_demand_kwh")
     if "bess" in components:
-        electric_cols.append("bess_soc_kwh")
+        elec_line_cols.append("bess_charge_kwh")
+        elec_line_cols.append("bess_discharge_kwh")
 
-    thermal_cols = ["thermal_demand_kwh"]
+    # --- Thermal diagram column definitions ---
+    therm_line_cols = []
     if "heat_pump_air" in components or "heat_pump_ground" in components:
-        thermal_cols.append("heat_pump_heat_kwh")
+        therm_line_cols.append("heat_pump_heat_kwh")
     if "gas_boiler" in components:
-        thermal_cols.append("gas_boiler_heat_kwh")
+        therm_line_cols.append("gas_boiler_heat_kwh")
     if "electric_boiler" in components:
-        thermal_cols.append("electric_boiler_heat_kwh")
+        therm_line_cols.append("electric_boiler_heat_kwh")
     if "tess" in components:
-        thermal_cols.append("tess_soc_kwh")
+        therm_line_cols.append("tess_charge_kwh")
+        therm_line_cols.append("tess_discharge_kwh")
 
     legend_labels = {
         "electricity_demand_kwh":              "Elec. demand",
-        "total_electricity_consumption_kwh":   "Total elec.",
+        "total_electricity_consumption_kwh":   "Total elec. (additional)",
         "pv_output_kwh":                       "PV output",
         "grid_supply_kwh":                     "Grid import",
         "grid_export_kwh":                     "Grid export",
         "heat_pump_electric_demand_kwh":       "HP elec.",
         "electric_boiler_electric_demand_kwh": "EB elec.",
-        "bess_soc_kwh":                        "BESS SOC",
-        "tess_soc_kwh":                        "TESS SOC",
-        "thermal_demand_kwh":                  "Thermal dem.",
+        "bess_charge_kwh":                     "BESS charge",
+        "bess_discharge_kwh":                  "BESS discharge",
+        "thermal_demand_kwh":                  "Thermal demand",
         "heat_pump_heat_kwh":                  "HP heat",
         "gas_boiler_heat_kwh":                 "Gas boiler",
         "electric_boiler_heat_kwh":            "EB heat",
+        "tess_charge_kwh":                     "TESS charge",
+        "tess_discharge_kwh":                  "TESS discharge",
     }
-    colors = {
-        "electricity_demand_kwh":              "#1f77b4",
-        "total_electricity_consumption_kwh":   "#ff7f0e",
-        "pv_output_kwh":                       "#f7c948",
-        "grid_supply_kwh":                     "#17becf",
-        "grid_export_kwh":                     "#aec7e8",
-        "heat_pump_electric_demand_kwh":       "#2ca02c",
-        "electric_boiler_electric_demand_kwh": "#d62728",
-        "bess_soc_kwh":                        "#9467bd",
-        "thermal_demand_kwh":                  "#8c564b",
-        "heat_pump_heat_kwh":                  "#e377c2",
-        "gas_boiler_heat_kwh":                 "#7f7f7f",
-        "electric_boiler_heat_kwh":            "#bcbd22",
-        "tess_soc_kwh":                        "#17becf",
+
+    # Bar colors (demand series)
+    bar_colors = {
+        "electricity_demand_kwh":            "#1f77b4",   # steel blue
+        "total_electricity_consumption_kwh": "#ff7f0e",   # orange
+        "thermal_demand_kwh":                "#8c564b",   # brown
+    }
+
+    # Line colors (non-demand series)
+    line_colors = {
+        "pv_output_kwh":                       "#f7c948",   # golden yellow
+        "grid_supply_kwh":                     "#17becf",   # teal
+        "grid_export_kwh":                     "#aec7e8",   # light blue
+        "heat_pump_electric_demand_kwh":       "#2ca02c",   # green
+        "electric_boiler_electric_demand_kwh": "#d62728",   # red
+        "bess_charge_kwh":                     "#9467bd",   # purple
+        "bess_discharge_kwh":                  "#c5b0d5",   # light purple
+        "heat_pump_heat_kwh":                  "#e377c2",   # pink
+        "gas_boiler_heat_kwh":                 "#7f7f7f",   # grey
+        "electric_boiler_heat_kwh":            "#bcbd22",   # yellow-green
+        "tess_charge_kwh":                     "#17becf",   # teal
+        "tess_discharge_kwh":                  "#9edae5",   # light teal
+    }
+
+    line_styles = {
+        "pv_output_kwh":                       "-",
+        "grid_supply_kwh":                     "--",
+        "grid_export_kwh":                     "-.",
+        "heat_pump_electric_demand_kwh":       "-",
+        "electric_boiler_electric_demand_kwh": "--",
+        "bess_charge_kwh":                     "-",
+        "bess_discharge_kwh":                  "--",
+        "heat_pump_heat_kwh":                  "-",
+        "gas_boiler_heat_kwh":                 "--",
+        "electric_boiler_heat_kwh":            "-.",
+        "tess_charge_kwh":                     "-",
+        "tess_discharge_kwh":                  "--",
     }
 
     config_label = CONFIG_LABELS.get(config_name, config_name)
@@ -298,28 +324,52 @@ def plot_seasonal_energy_diagrams(
         if not season_rows:
             continue
 
-        hours = [r["hour"] for r in season_rows]
+        hours = np.array([r["hour"] for r in season_rows])
         season_slug = season.lower()
 
+        # ----------------------------------------------------------------
         # Electrical energy diagram
+        # ----------------------------------------------------------------
         fig, ax = plt.subplots(figsize=(10, 6))
-        for col in electric_cols:
+
+        elec_demand = np.array([r["electricity_demand_kwh"] for r in season_rows])
+        total_elec  = np.array([r["total_electricity_consumption_kwh"] for r in season_rows])
+        extra_elec  = np.maximum(0.0, total_elec - elec_demand)
+
+        ax.bar(hours, elec_demand, width=bar_width,
+               color=bar_colors["electricity_demand_kwh"],
+               label=legend_labels["electricity_demand_kwh"],
+               zorder=2)
+        ax.bar(hours, extra_elec, width=bar_width,
+               bottom=elec_demand,
+               color=bar_colors["total_electricity_consumption_kwh"],
+               label=legend_labels["total_electricity_consumption_kwh"],
+               zorder=2)
+
+        for col in elec_line_cols:
+            if col == "bess_discharge_kwh":
+                values = -np.array([r[col] for r in season_rows])
+            else:
+                values = np.array([r[col] for r in season_rows])
             ax.plot(
-                hours,
-                [r[col] for r in season_rows],
+                hours, values,
                 label=legend_labels[col],
-                color=colors[col],
+                color=line_colors[col],
+                linestyle=line_styles[col],
                 linewidth=2,
+                zorder=3,
             )
+
         ax.set_title(f"{config_label} | {season} | Electrical Energy")
         ax.set_xlabel("Hour of day [h]")
         ax.set_ylabel("Electrical energy [kWh]")
-        ax.set_xlim(0, 23)
-        ax.set_ylim(0, ELECTRICAL_Y_MAX)
+        ax.set_xlim(-0.5, 23.5)
+        ax.set_ylim(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX)
         ax.set_xticks(range(0, 24))
-        ax.set_yticks(np.arange(0, ELECTRICAL_Y_MAX + 0.1, 1.0))
+        ax.set_yticks(np.arange(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX + 0.1, 1.0))
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
         ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend()
+        ax.legend(loc="upper left", fontsize=10)
         el_output = (
             BASE_DIR / "Results" / "Figures"
             / f"{config_name}_{season_slug}_el.pdf"
@@ -329,25 +379,41 @@ def plot_seasonal_energy_diagrams(
         plt.close(fig)
         print(f"  diagram saved: {el_output}")
 
+        # ----------------------------------------------------------------
         # Thermal energy diagram
+        # ----------------------------------------------------------------
         fig, ax = plt.subplots(figsize=(10, 6))
-        for col in thermal_cols:
+
+        thermal_demand = np.array([r["thermal_demand_kwh"] for r in season_rows])
+        ax.bar(hours, thermal_demand, width=bar_width,
+               color=bar_colors["thermal_demand_kwh"],
+               label=legend_labels["thermal_demand_kwh"],
+               zorder=2)
+
+        for col in therm_line_cols:
+            if col == "tess_discharge_kwh":
+                values = -np.array([r[col] for r in season_rows])
+            else:
+                values = np.array([r[col] for r in season_rows])
             ax.plot(
-                hours,
-                [r[col] for r in season_rows],
+                hours, values,
                 label=legend_labels[col],
-                color=colors[col],
+                color=line_colors[col],
+                linestyle=line_styles[col],
                 linewidth=2,
+                zorder=3,
             )
+
         ax.set_title(f"{config_label} | {season} | Thermal Energy")
         ax.set_xlabel("Hour of day [h]")
         ax.set_ylabel("Thermal energy [kWh]")
-        ax.set_xlim(0, 23)
-        ax.set_ylim(0, THERMAL_Y_MAX)
+        ax.set_xlim(-0.5, 23.5)
+        ax.set_ylim(-(THERMAL_Y_MAX * 0.25), THERMAL_Y_MAX)
         ax.set_xticks(range(0, 24))
-        ax.set_yticks(np.arange(0, THERMAL_Y_MAX + 0.1, 2.0))
+        ax.set_yticks(np.arange(-(THERMAL_Y_MAX * 0.25), THERMAL_Y_MAX + 0.1, 2.0))
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
         ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend()
+        ax.legend(loc="upper left", fontsize=10)
         th_output = (
             BASE_DIR / "Results" / "Figures"
             / f"{config_name}_{season_slug}_th.pdf"
