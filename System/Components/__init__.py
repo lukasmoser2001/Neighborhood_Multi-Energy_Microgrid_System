@@ -8,7 +8,6 @@ from .components import (
     GasBoiler,
     ElectricBoiler,
     HeatPumpAir,
-    HeatPumpGround,
     BatteryStorage,
     ThermalEnergyStorage,
 )
@@ -19,7 +18,6 @@ __all__ = [
     "GasBoiler",
     "ElectricBoiler",
     "HeatPumpAir",
-    "HeatPumpGround",
     "BatteryStorage",
     "ThermalEnergyStorage",
 ]

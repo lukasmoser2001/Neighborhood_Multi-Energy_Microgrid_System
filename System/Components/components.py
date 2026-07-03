@@ -34,10 +34,8 @@ def _load_heat_cop_data(column_name: str) -> list[list[float]]:
     return data
 
 _HEAT_COP_ASHP_WATER_COLUMN = "FR_COP_ASHP_water"
-_HEAT_COP_GSHP_FLOOR_COLUMN = "FR_COP_GSHP_floor"
 _HEAT_COP_SERIES = {
     "air": _load_heat_cop_data(_HEAT_COP_ASHP_WATER_COLUMN),
-    "ground": _load_heat_cop_data(_HEAT_COP_GSHP_FLOOR_COLUMN),
 }
 
 
@@ -189,36 +187,6 @@ class HeatPumpAir:
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for HeatPumpAir in component_parameters.json")
         self.cop_series = _HEAT_COP_SERIES["air"]
-
-    def get_cop(self, season_index: int, hour_index: int) -> float:
-        return _get_heat_pump_cop(self.cop_series, season_index, hour_index)
-
-    def get_electricity_demand_kwh(self, thermal_kwh: float, season_index: int, hour_index: int) -> float:
-        cop = self.get_cop(season_index, hour_index)
-        return thermal_kwh / cop if cop > 0 else 0.0
-
-    def get_cost_eur(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.lcoh_eur_per_kwh if self.enabled else 0.0
-
-    def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
-
-
-class HeatPumpGround:
-    def __init__(self, config: dict | None = None):
-        cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_ground", {})
-        self.enabled = cfg.get("enabled", False)
-        if not self.enabled:
-            self.lcoh_eur_per_kwh = 0.0
-            self.emission_factor_kg_per_kwh = 0.0
-            self.cop_series = []
-            return
-        try:
-            self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
-            self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
-        except KeyError as e:
-            raise ValueError(f"Missing required parameter {e.args[0]!r} for HeatPumpGround in component_parameters.json")
-        self.cop_series = _HEAT_COP_SERIES["ground"]
 
     def get_cop(self, season_index: int, hour_index: int) -> float:
         return _get_heat_pump_cop(self.cop_series, season_index, hour_index)

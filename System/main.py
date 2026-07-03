@@ -13,7 +13,6 @@ from Components import (
     GasBoiler,
     ElectricBoiler,
     HeatPumpAir,
-    HeatPumpGround,
     BatteryStorage,
     ThermalEnergyStorage,
 )
@@ -58,8 +57,8 @@ THERMAL_Y_MAX = 12.0     # kWh
 
 # Human-readable labels for each predefined configuration
 CONFIG_LABELS = {
-    "A_grid_eb":              "A: Grid + Electric Boiler",
-    "B_grid_gb":              "B: Grid + Gas Boiler",
+    "A_grid_gb":              "A: Grid + Gas Boiler",
+    "B_grid_eb":              "B: Grid + Electric Boiler",
     "C_grid_eb_pv_bess":      "C: Grid + Electric Boiler + PV + BESS",
     "D_grid_ashp_pv_bess_tess": "D: Grid + ASHP + PV + BESS + TESS",
 }
@@ -119,8 +118,8 @@ def load_component_parameters(path: Path) -> dict:
 
 def apply_component_parameters(config: dict) -> dict:
     # Instantiate and return only enabled components from configuration.
-    # The 'enabled' flag is now injected by apply_configuration() in
-    # Configurations/configurations.py — it is no longer stored in the JSON.
+    # The 'enabled' flag is injected by apply_configuration() in
+    # Configurations/configurations.py.
     components = {}
 
     if config["utility_grid"].get("enabled", True):
@@ -138,9 +137,6 @@ def apply_component_parameters(config: dict) -> dict:
     if config["heat_pump_air"].get("enabled", False):
         components["heat_pump_air"] = HeatPumpAir(config["heat_pump_air"])
 
-    if config["heat_pump_ground"].get("enabled", False):
-        components["heat_pump_ground"] = HeatPumpGround(config["heat_pump_ground"])
-
     if config.get("BESS", {}).get("enabled", False):
         components["bess"] = BatteryStorage(config.get("BESS", {}))
 
@@ -150,11 +146,53 @@ def apply_component_parameters(config: dict) -> dict:
     return components
 
 
-def write_hourly_results(path: Path, rows: list[dict]) -> None:
-    # Write hourly results to a CSV file.
+def build_result_fields(components: dict) -> list[str]:
+    # Always-present columns.
+    fields = [
+        "season",
+        "hour",
+        "electricity_demand_kwh",
+        "total_electricity_consumption_kwh",
+        "thermal_demand_kwh",
+        "grid_supply_kwh",
+        "grid_export_kwh",
+        "grid_revenue_eur",
+        "pv_cell_temp_c",
+    ]
+    # Component-specific columns.
+    if "pv" in components:
+        fields.append("pv_output_kwh")
+    if "gas_boiler" in components:
+        fields += ["gas_boiler_heat_kwh", "cost_gas_boiler_eur", "emissions_gas_boiler_kg"]
+    if "electric_boiler" in components:
+        fields += ["electric_boiler_heat_kwh", "electric_boiler_electric_demand_kwh",
+                   "cost_electric_boiler_eur", "emissions_electric_boiler_kg"]
+    if "heat_pump_air" in components:
+        fields += ["heat_pump_heat_kwh", "heat_pump_electric_demand_kwh",
+                   "cost_heat_pump_eur", "emissions_heat_pump_kg"]
+    if "bess" in components:
+        fields += ["bess_soc_kwh", "bess_soc_pct", "bess_charge_kwh", "bess_discharge_kwh",
+                   "cost_bess_eur"]
+    if "tess" in components:
+        fields += ["tess_soc_kwh", "tess_soc_pct", "tess_charge_kwh", "tess_discharge_kwh",
+                   "cost_tess_eur", "emissions_tess_kg"]
+    # Cost and emission totals.
+    fields += [
+        "cost_pv_capex_hour_eur",
+        "cost_pv_om_eur",
+        "cost_grid_eur",
+        "total_cost_hour_eur",
+        "emissions_grid_kg",
+        "total_emissions_hour_kg",
+    ]
+    return fields
+
+
+def write_hourly_results(path: Path, rows: list[dict], fields: list[str]) -> None:
+    # Write hourly results to a CSV file using the provided field list.
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=RESULT_FIELDS)
+        writer = csv.DictWriter(csvfile, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -188,7 +226,7 @@ def write_annual_results(path: Path, summary: dict) -> None:
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerow(summary)
 
@@ -229,16 +267,13 @@ def plot_seasonal_energy_diagrams(
 
     bar_width = 0.6
 
-    # --- Electrical diagram column definitions ---
-    # Demand bars: base = electricity_demand_kwh, stacked extra = total - base
-    # Line series: grid import/export, PV, HP elec., EB elec., BESS charge/discharge
     elec_line_cols = [
         "grid_supply_kwh",
         "grid_export_kwh",
     ]
     if "pv" in components:
         elec_line_cols.append("pv_output_kwh")
-    if "heat_pump_air" in components or "heat_pump_ground" in components:
+    if "heat_pump_air" in components:
         elec_line_cols.append("heat_pump_electric_demand_kwh")
     if "electric_boiler" in components:
         elec_line_cols.append("electric_boiler_electric_demand_kwh")
@@ -246,9 +281,8 @@ def plot_seasonal_energy_diagrams(
         elec_line_cols.append("bess_charge_kwh")
         elec_line_cols.append("bess_discharge_kwh")
 
-    # --- Thermal diagram column definitions ---
     therm_line_cols = []
-    if "heat_pump_air" in components or "heat_pump_ground" in components:
+    if "heat_pump_air" in components:
         therm_line_cols.append("heat_pump_heat_kwh")
     if "gas_boiler" in components:
         therm_line_cols.append("gas_boiler_heat_kwh")
@@ -276,27 +310,25 @@ def plot_seasonal_energy_diagrams(
         "tess_discharge_kwh":                  "TESS discharge",
     }
 
-    # Bar colors (demand series)
     bar_colors = {
-        "electricity_demand_kwh":            "#1f77b4",   # steel blue
-        "total_electricity_consumption_kwh": "#ff7f0e",   # orange
-        "thermal_demand_kwh":                "#8c564b",   # brown
+        "electricity_demand_kwh":            "#1f77b4",
+        "total_electricity_consumption_kwh": "#ff7f0e",
+        "thermal_demand_kwh":                "#8c564b",
     }
 
-    # Line colors (non-demand series)
     line_colors = {
-        "pv_output_kwh":                       "#f7c948",   # golden yellow
-        "grid_supply_kwh":                     "#17becf",   # teal
-        "grid_export_kwh":                     "#aec7e8",   # light blue
-        "heat_pump_electric_demand_kwh":       "#2ca02c",   # green
-        "electric_boiler_electric_demand_kwh": "#d62728",   # red
-        "bess_charge_kwh":                     "#9467bd",   # purple
-        "bess_discharge_kwh":                  "#c5b0d5",   # light purple
-        "heat_pump_heat_kwh":                  "#e377c2",   # pink
-        "gas_boiler_heat_kwh":                 "#7f7f7f",   # grey
-        "electric_boiler_heat_kwh":            "#bcbd22",   # yellow-green
-        "tess_charge_kwh":                     "#17becf",   # teal
-        "tess_discharge_kwh":                  "#9edae5",   # light teal
+        "pv_output_kwh":                       "#f7c948",
+        "grid_supply_kwh":                     "#17becf",
+        "grid_export_kwh":                     "#aec7e8",
+        "heat_pump_electric_demand_kwh":       "#2ca02c",
+        "electric_boiler_electric_demand_kwh": "#d62728",
+        "bess_charge_kwh":                     "#9467bd",
+        "bess_discharge_kwh":                  "#c5b0d5",
+        "heat_pump_heat_kwh":                  "#e377c2",
+        "gas_boiler_heat_kwh":                 "#7f7f7f",
+        "electric_boiler_heat_kwh":            "#bcbd22",
+        "tess_charge_kwh":                     "#17becf",
+        "tess_discharge_kwh":                  "#9edae5",
     }
 
     line_styles = {
@@ -327,9 +359,6 @@ def plot_seasonal_energy_diagrams(
         hours = np.array([r["hour"] for r in season_rows])
         season_slug = season.lower()
 
-        # ----------------------------------------------------------------
-        # Electrical energy diagram
-        # ----------------------------------------------------------------
         fig, ax = plt.subplots(figsize=(10, 6))
 
         elec_demand = np.array([r["electricity_demand_kwh"] for r in season_rows])
@@ -379,9 +408,6 @@ def plot_seasonal_energy_diagrams(
         plt.close(fig)
         print(f"  diagram saved: {el_output}")
 
-        # ----------------------------------------------------------------
-        # Thermal energy diagram
-        # ----------------------------------------------------------------
         fig, ax = plt.subplots(figsize=(10, 6))
 
         thermal_demand = np.array([r["thermal_demand_kwh"] for r in season_rows])
@@ -488,7 +514,7 @@ def plot_soc_diagram(
 
 
 # ---------------------------------------------------------------------------
-# Comparison (previously comparison.py)
+# Comparison
 # ---------------------------------------------------------------------------
 
 def collect_annual_results() -> list[dict]:
@@ -588,8 +614,6 @@ def plot_comparison_chart(records: list[dict]) -> Path:
 
 
 def run_comparison() -> None:
-    # Read all per-configuration annual results and produce the comparison
-    # table and bar chart in one step.
     records = collect_annual_results()
     write_comparison_table(records)
     plot_comparison_chart(records)
@@ -605,19 +629,16 @@ def run_single_configuration(
     base_component_config: dict,
     all_solar_data: list[tuple[float, float]],
 ) -> None:
-    # Apply the predefined configuration overrides, instantiate components,
-    # run the hourly simulation, write outputs, and generate diagrams.
-
     component_config = apply_configuration(base_component_config, config_name)
     components = apply_component_parameters(component_config)
     annualization_factor = component_config["annualization"]["factor"]
+    result_fields = build_result_fields(components)
 
     grid = components.get("grid")
     pv = components.get("pv")
     gas_boiler = components.get("gas_boiler")
     electric_boiler = components.get("electric_boiler")
     heat_pump_air = components.get("heat_pump_air")
-    heat_pump_ground = components.get("heat_pump_ground")
     bess = components.get("bess")
     tess = components.get("tess")
 
@@ -643,8 +664,6 @@ def run_single_configuration(
     total_emissions_bess = 0.0
     total_emissions_tess = 0.0
 
-    # Hour indices for representative days: Jan 15, Apr 15, Jul 15, Oct 25
-    # Data starts Jan 1 00:00 so hour 336 = Jan 15 00:00, etc.
     SEASON_HOUR_INDICES = [336, 2496, 4680, 6888]
 
     for season_index, (season_name, electricity_path, thermal_path) in enumerate(SEASON_FILES):
@@ -680,11 +699,9 @@ def run_single_configuration(
             heat_pump_electric_demand_kwh = 0.0
             electric_boiler_electric_demand_kwh = 0.0
 
-            active_heat_pump = heat_pump_air or heat_pump_ground
-
-            if active_heat_pump:
+            if heat_pump_air:
                 heat_pump_heat_kwh = thermal_kwh
-                heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+                heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
                     thermal_kwh, season_index, hour_index
                 )
             elif electric_boiler and not gas_boiler:
@@ -705,7 +722,7 @@ def run_single_configuration(
                 tess_heat_supplied = 0.0
                 remaining_thermal_demand = thermal_kwh
 
-            if active_heat_pump:
+            if heat_pump_air:
                 heat_pump_heat_kwh = remaining_thermal_demand
             elif electric_boiler and not gas_boiler:
                 electric_boiler_heat_kwh = remaining_thermal_demand
@@ -720,7 +737,7 @@ def run_single_configuration(
                     heat_pump_heat_kwh + electric_boiler_heat_kwh + gas_boiler_heat_kwh
                 )
                 if tess_charge_kwh > 0.0:
-                    if active_heat_pump:
+                    if heat_pump_air:
                         heat_pump_heat_kwh += tess_charge_kwh
                     elif electric_boiler and not gas_boiler:
                         electric_boiler_heat_kwh += tess_charge_kwh
@@ -734,8 +751,8 @@ def run_single_configuration(
                     electric_boiler_heat_kwh
                 )
 
-            if active_heat_pump:
-                heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+            if heat_pump_air:
+                heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
                     heat_pump_heat_kwh, season_index, hour_index
                 )
 
@@ -815,12 +832,12 @@ def run_single_configuration(
                     tess_delta_kwh = tess.force_soc_to_target()
                     if tess_delta_kwh > 0.0:
                         thermal_kwh += tess_delta_kwh
-                        if active_heat_pump:
+                        if heat_pump_air:
                             heat_pump_heat_kwh += tess_delta_kwh
-                            heat_pump_electric_demand_kwh = active_heat_pump.get_electricity_demand_kwh(
+                            heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
                                 heat_pump_heat_kwh, season_index, hour_index
                             )
-                            total_electricity_consumption_kwh += active_heat_pump.get_electricity_demand_kwh(
+                            total_electricity_consumption_kwh += heat_pump_air.get_electricity_demand_kwh(
                                 tess_delta_kwh, season_index, hour_index
                             )
                         elif electric_boiler and not gas_boiler:
@@ -855,8 +872,8 @@ def run_single_configuration(
                 cost_electric_boiler_eur = electric_boiler.get_cost_eur(electric_boiler_heat_kwh)
 
             cost_heat_pump_eur = 0.0
-            if active_heat_pump:
-                cost_heat_pump_eur = active_heat_pump.get_cost_eur(heat_pump_heat_kwh)
+            if heat_pump_air:
+                cost_heat_pump_eur = heat_pump_air.get_cost_eur(heat_pump_heat_kwh)
 
             cost_bess_eur = 0.0
             if bess:
@@ -883,8 +900,7 @@ def run_single_configuration(
             emissions_gas_boiler_kg = gas_boiler.get_emissions_kg(gas_boiler_heat_kwh) if gas_boiler else 0.0
             emissions_electric_boiler_kg = (
                 electric_boiler.get_emissions_kg(electric_boiler_heat_kwh)
-                if electric_boiler
-                else 0.0
+                if electric_boiler else 0.0
             )
             emissions_heat_pump_kg = 0.0
             emissions_bess_kg = 0.0
@@ -1004,7 +1020,6 @@ def run_single_configuration(
         + annual_emissions_tess
     )
 
-    # Write outputs — config_name alone is sufficient for unique file identification
     output_file = (
         BASE_DIR / "Results" / "Tables"
         / f"hourly_results_{config_name}.csv"
@@ -1013,7 +1028,7 @@ def run_single_configuration(
         BASE_DIR / "Results" / "Tables" / f"annual_results_{config_name}.csv"
     )
 
-    write_hourly_results(output_file, hourly_results)
+    write_hourly_results(output_file, hourly_results, result_fields)
     plot_seasonal_energy_diagrams(hourly_results, components, config_name)
     plot_soc_diagram(hourly_results, components, config_name)
     write_annual_results(
@@ -1054,10 +1069,6 @@ def run_single_configuration(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    # Load shared parameters and solar data once; then loop over all
-    # predefined configurations, simulate each, and finally run the
-    # cross-configuration comparison in one pass.
-
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     all_solar_data = read_solar_data(SOLAR_DATA_FILE)
 
@@ -1073,53 +1084,6 @@ def main() -> None:
     print("\n--- Running cross-configuration comparison ---")
     run_comparison()
     print("\nAll configurations and comparison completed.")
-
-
-# ---------------------------------------------------------------------------
-# Output column definitions
-# ---------------------------------------------------------------------------
-
-RESULT_FIELDS = [
-    "season",
-    "hour",
-    "electricity_demand_kwh",
-    "total_electricity_consumption_kwh",
-    "heat_pump_heat_kwh",
-    "heat_pump_electric_demand_kwh",
-    "electric_boiler_electric_demand_kwh",
-    "thermal_demand_kwh",
-    "pv_output_kwh",
-    "grid_export_kwh",
-    "grid_revenue_eur",
-    "pv_cell_temp_c",
-    "grid_supply_kwh",
-    "gas_boiler_heat_kwh",
-    "electric_boiler_heat_kwh",
-    "bess_soc_kwh",
-    "bess_soc_pct",
-    "bess_charge_kwh",
-    "bess_discharge_kwh",
-    "tess_soc_kwh",
-    "tess_soc_pct",
-    "tess_charge_kwh",
-    "tess_discharge_kwh",
-    "cost_pv_capex_hour_eur",
-    "cost_pv_om_eur",
-    "cost_grid_eur",
-    "cost_gas_boiler_eur",
-    "cost_electric_boiler_eur",
-    "cost_heat_pump_eur",
-    "cost_bess_eur",
-    "cost_tess_eur",
-    "total_cost_hour_eur",
-    "emissions_grid_kg",
-    "emissions_gas_boiler_kg",
-    "emissions_electric_boiler_kg",
-    "emissions_heat_pump_kg",
-    "emissions_bess_kg",
-    "emissions_tess_kg",
-    "total_emissions_hour_kg",
-]
 
 
 if __name__ == "__main__":
