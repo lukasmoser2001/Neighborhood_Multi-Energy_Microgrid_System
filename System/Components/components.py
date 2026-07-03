@@ -264,6 +264,10 @@ class BatteryStorage:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
         self.soc = self.E_cap * self.soc_init_frac
 
+    @property
+    def soc_pct(self) -> float:
+        return (self.soc / self.E_cap * 100.0) if self.E_cap > 0.0 else 0.0
+
     def reset_soc(self) -> None:
         self.soc = self.E_cap * self.soc_init_frac
 
@@ -295,7 +299,6 @@ class BatteryStorage:
         return discharge_kwh * self.eta_disc
 
     def get_cost_eur(self, charge_kwh: float) -> float:
-        # LCOS [€/kWh] x energy charged into battery
         return charge_kwh * self.LCOS if self.enabled else 0.0
 
 
@@ -326,6 +329,10 @@ class ThermalEnergyStorage:
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for ThermalEnergyStorage in component_parameters.json")
         self.soc = self.E_cap * self.soc_init_frac
+
+    @property
+    def soc_pct(self) -> float:
+        return (self.soc / self.E_cap * 100.0) if self.E_cap > 0.0 else 0.0
 
     def reset_soc(self) -> None:
         self.soc = self.E_cap * self.soc_init_frac

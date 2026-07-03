@@ -424,6 +424,69 @@ def plot_seasonal_energy_diagrams(
         print(f"  diagram saved: {th_output}")
 
 
+def plot_soc_diagram(
+    hourly_results: list[dict],
+    components: dict,
+    config_name: str,
+) -> None:
+    has_bess = "bess" in components
+    has_tess = "tess" in components
+    if not has_bess and not has_tess:
+        return
+
+    season_order = ["Winter", "Spring", "Summer", "Autumn"]
+    config_label = CONFIG_LABELS.get(config_name, config_name)
+    bar_width = 0.35
+
+    for season in season_order:
+        season_rows = sorted(
+            [r for r in hourly_results if r["season"] == season],
+            key=lambda r: r["hour"],
+        )
+        if not season_rows:
+            continue
+
+        hours = np.array([r["hour"] for r in season_rows], dtype=float)
+        season_slug = season.lower()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        if has_bess and has_tess:
+            offset = bar_width / 2.0
+            ax.bar(hours - offset,
+                   [r["bess_soc_pct"] for r in season_rows],
+                   width=bar_width, color="#9467bd", label="BESS SOC", zorder=2)
+            ax.bar(hours + offset,
+                   [r["tess_soc_pct"] for r in season_rows],
+                   width=bar_width, color="#17becf", label="TESS SOC", zorder=2)
+        elif has_bess:
+            ax.bar(hours,
+                   [r["bess_soc_pct"] for r in season_rows],
+                   width=bar_width * 1.5, color="#9467bd", label="BESS SOC", zorder=2)
+        else:
+            ax.bar(hours,
+                   [r["tess_soc_pct"] for r in season_rows],
+                   width=bar_width * 1.5, color="#17becf", label="TESS SOC", zorder=2)
+
+        ax.set_title(f"{config_label} | {season} | Storage SOC")
+        ax.set_xlabel("Hour of day [h]")
+        ax.set_ylabel("State of Charge [%]")
+        ax.set_xlim(-0.5, 23.5)
+        ax.set_ylim(0, 100)
+        ax.set_xticks(range(0, 24))
+        ax.set_yticks(range(0, 101, 10))
+        ax.grid(True, linestyle="--", alpha=0.4)
+        ax.legend(loc="upper left", fontsize=10)
+        soc_output = (
+            BASE_DIR / "Results" / "Figures"
+            / f"{config_name}_{season_slug}_soc.pdf"
+        )
+        fig.tight_layout()
+        fig.savefig(soc_output, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  diagram saved: {soc_output}")
+
+
 # ---------------------------------------------------------------------------
 # Comparison (previously comparison.py)
 # ---------------------------------------------------------------------------
@@ -679,8 +742,10 @@ def run_single_configuration(
             if tess:
                 tess.update_state(q_tess_in=tess_charge_kwh, q_tess_out=tess_discharge_kwh)
                 tess_soc_kwh = tess.soc
+                tess_soc_pct = tess.soc_pct
             else:
                 tess_soc_kwh = 0.0
+                tess_soc_pct = 0.0
 
             # Electricity energy balance
             total_electricity_consumption_kwh = (
@@ -732,6 +797,7 @@ def run_single_configuration(
 
             pv_used_kwh = pv_output_kwh - grid_export_kwh
             bess_soc_kwh = bess.soc if bess else 0.0
+            bess_soc_pct = bess.soc_pct if bess else 0.0
 
             # End-of-day SOC restoration (hour 23)
             if hour_index == 23:
@@ -743,6 +809,7 @@ def run_single_configuration(
                     elif bess_delta_kwh < 0.0:
                         grid_export_kwh += abs(bess_delta_kwh)
                     bess_soc_kwh = bess.soc
+                    bess_soc_pct = bess.soc_pct
 
                 if tess:
                     tess_delta_kwh = tess.force_soc_to_target()
@@ -764,6 +831,7 @@ def run_single_configuration(
                         elif gas_boiler:
                             gas_boiler_heat_kwh += tess_delta_kwh
                     tess_soc_kwh = tess.soc
+                    tess_soc_pct = tess.soc_pct
 
             # Costs
             cost_pv_capex_hour_eur = 0.0
@@ -869,9 +937,11 @@ def run_single_configuration(
                     "gas_boiler_heat_kwh":                 round(gas_boiler_heat_kwh, 4),
                     "electric_boiler_heat_kwh":            round(electric_boiler_heat_kwh, 4),
                     "bess_soc_kwh":                        round(bess_soc_kwh, 4),
+                    "bess_soc_pct":                        round(bess_soc_pct, 2),
                     "bess_charge_kwh":                     round(bess_charge_kwh, 4),
                     "bess_discharge_kwh":                  round(bess_discharge_kwh, 4),
                     "tess_soc_kwh":                        round(tess_soc_kwh, 4),
+                    "tess_soc_pct":                        round(tess_soc_pct, 2),
                     "tess_charge_kwh":                     round(tess_charge_kwh, 4),
                     "tess_discharge_kwh":                  round(tess_discharge_kwh, 4),
                     "cost_pv_capex_hour_eur":              round(cost_pv_capex_hour_eur, 4),
@@ -945,6 +1015,7 @@ def run_single_configuration(
 
     write_hourly_results(output_file, hourly_results)
     plot_seasonal_energy_diagrams(hourly_results, components, config_name)
+    plot_soc_diagram(hourly_results, components, config_name)
     write_annual_results(
         annual_output_file,
         {
@@ -1025,9 +1096,11 @@ RESULT_FIELDS = [
     "gas_boiler_heat_kwh",
     "electric_boiler_heat_kwh",
     "bess_soc_kwh",
+    "bess_soc_pct",
     "bess_charge_kwh",
     "bess_discharge_kwh",
     "tess_soc_kwh",
+    "tess_soc_pct",
     "tess_charge_kwh",
     "tess_discharge_kwh",
     "cost_pv_capex_hour_eur",
