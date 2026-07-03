@@ -44,9 +44,11 @@ for target_date in target_dates:
     plt.xticks(rotation=45, ha='right')
 
     plt.grid(True, alpha=0.3, linestyle='--')
-    plt.legend(loc='best', fontsize=11, framealpha=0.9)
+    plt.ylim(0, 800)
+    plt.yticks(range(0, 801, 100))
+    plt.legend(loc='upper left', fontsize=11, framealpha=0.9)
     plt.tight_layout()
 
-    figure_filename = f'electricity_consumption_graph_{target_date.strftime("%d_%m_%Y")}.png'
-    plt.savefig(figure_filename, dpi=300, bbox_inches='tight')
+    figure_filename = f'electricity_consumption_graph_{target_date.strftime("%d_%m_%Y")}.pdf'
+    plt.savefig(figure_filename, bbox_inches='tight')
     plt.close()

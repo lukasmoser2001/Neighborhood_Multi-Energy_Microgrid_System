@@ -41,7 +41,7 @@ for target_date in target_dates:
     plt.figure(figsize=(12, 6))
     plt.plot(result_table['utc_timestamp'], result_table['FR_heat_demand_space_SFH'],
              marker='o', linewidth=2, markersize=4,
-             label='Space Heating Demand (SFH)', color='#FF6B6B')
+             label='Space Heating Demand', color='#FF6B6B')
     plt.plot(result_table['utc_timestamp'], result_table['FR_heat_demand_water'],
              marker='s', linewidth=2, markersize=4,
              label='Water Heating Demand', color='#4ECDC4')
@@ -56,9 +56,11 @@ for target_date in target_dates:
     plt.xticks(rotation=45, ha='right')
 
     plt.grid(True, alpha=0.3, linestyle='--')
-    plt.legend(loc='best', fontsize=11, framealpha=0.9)
+    plt.ylim(0, 3100)
+    plt.yticks(range(0, 3501, 500))
+    plt.legend(loc='upper left', fontsize=11, framealpha=0.9)
     plt.tight_layout()
 
-    figure_filename = f'heat_demand_graph_FR_{target_date.strftime("%d_%m_%Y")}.png'
-    plt.savefig(figure_filename, dpi=300, bbox_inches='tight')
+    figure_filename = f'heat_demand_graph_FR_{target_date.strftime("%d_%m_%Y")}.pdf'
+    plt.savefig(figure_filename, bbox_inches='tight')
     plt.close()

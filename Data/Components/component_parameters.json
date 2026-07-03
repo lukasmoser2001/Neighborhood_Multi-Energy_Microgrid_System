@@ -33,10 +33,6 @@
     "lcoh_eur_per_kwh": 0.135,
     "emission_factor_kg_per_kwh": 0.0
   },
-  "heat_pump_ground": {
-    "lcoh_eur_per_kwh": 0.135,
-    "emission_factor_kg_per_kwh": 0.0
-  },
   "BESS": {
     "sigma_BES": 0.00003,
     "eta_BES_char": 0.945,

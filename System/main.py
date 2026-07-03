@@ -19,9 +19,6 @@ from Components import (
 )
 from Configurations.configurations import CONFIGURATIONS, apply_configuration
 
-# ---------------------------------------------------------------------------
-# File paths and column names
-# ---------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 COMPONENT_PARAMETERS_FILE = BASE_DIR / "Data" / "Components" / "component_parameters.json"
 
@@ -261,7 +258,7 @@ def plot_seasonal_energy_diagrams(
         thermal_cols.append("tess_soc_kwh")
 
     legend_labels = {
-        "electricity_demand_kwh":              "Demand",
+        "electricity_demand_kwh":              "Elec. demand",
         "total_electricity_consumption_kwh":   "Total elec.",
         "pv_output_kwh":                       "PV output",
         "grid_supply_kwh":                     "Grid import",
