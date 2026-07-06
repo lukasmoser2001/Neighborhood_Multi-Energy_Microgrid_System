@@ -1,12 +1,17 @@
+﻿from __future__ import annotations
+
+from datetime import datetime, timezone
 from pathlib import Path
+import copy
 import csv
 import json
 import os
-import copy
+
 import matplotlib
-matplotlib.use("Agg")  # non-interactive backend, safe for scripts without a display
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+
 from Components import (
     UtilityGrid,
     PVSystem,
@@ -20,92 +25,134 @@ from Configurations.configurations import CONFIGURATIONS, apply_configuration
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 COMPONENT_PARAMETERS_FILE = BASE_DIR / "Data" / "Components" / "component_parameters.json"
-
-SEASON_FILES = [
-    (
-        "Winter",
-        BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_01_2023.csv",
-        BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_01_2015.csv",
-    ),
-    (
-        "Spring",
-        BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_04_2023.csv",
-        BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_04_2015.csv",
-    ),
-    (
-        "Summer",
-        BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_15_07_2023.csv",
-        BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_07_2015.csv",
-    ),
-    (
-        "Autumn",
-        BASE_DIR / "Data" / "Load" / "Electricity" / "extracted_gas_house_25_10_2022.csv",
-        BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_10_2015.csv",
-    ),
+ELECTRICITY_DATA_FILE = BASE_DIR / "Data" / "Load" / "Electricity" / "gas_house-summary.csv"
+THERMAL_DATA_FILE = BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_2015.csv"
+SOLAR_DATA_CANDIDATES = [
+    BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv",
+    BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "IT_Tamb_Compiegne_2023.csv",
+    BASE_DIR / "Data" / "Load" / "OtherFactors" / "SolarIrradiation" / "IT_Tamb_Compiegne_2023.csv",
 ]
-
-SOLAR_DATA_FILE = BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv"
 ELECTRICITY_COLUMN_NAME = "Mean"
 THERMAL_SPACE_COLUMN = "FR_heat_demand_space_SFH"
 THERMAL_WATER_COLUMN = "FR_heat_demand_water"
+HEAT_COP_ASHP_WATER_COLUMN = "FR_COP_ASHP_water"
 
-# ---------------------------------------------------------------------------
-# Fixed y-axis limits for comparable diagrams across configurations
-# ---------------------------------------------------------------------------
-ELECTRICAL_Y_MAX = 7.0   # kWh
-THERMAL_Y_MAX = 12.0     # kWh
+ELECTRICAL_Y_MAX = 7.0
+THERMAL_Y_MAX = 12.0
 
-# Human-readable labels for each predefined configuration
 CONFIG_LABELS = {
-    "A_grid_gb":              "A: Grid + Gas Boiler",
-    "B_grid_eb":              "B: Grid + Electric Boiler",
-    "C_grid_eb_pv_bess":      "C: Grid + Electric Boiler + PV + BESS",
+    "A_grid_gb": "A: Grid + Gas Boiler",
+    "B_grid_eb": "B: Grid + Electric Boiler",
+    "C_grid_eb_pv_bess": "C: Grid + Electric Boiler + PV + BESS",
     "D_grid_ashp_pv_bess_tess": "D: Grid + ASHP + PV + BESS + TESS",
 }
 
+EXAMPLE_DATES = [
+    ("15_01", 1, 15),
+    ("15_04", 4, 15),
+    ("15_07", 7, 15),
+    ("15_10", 10, 15),
+]
 
-# ---------------------------------------------------------------------------
-# I/O helpers
-# ---------------------------------------------------------------------------
 
 def parse_float(value: str) -> float:
-    # Convert CSV text values to float; accept commas as decimal separators.
     if value is None:
         return 0.0
-    return float(value.replace(",", "."))
+    text = str(value).strip()
+    if not text:
+        return 0.0
+    try:
+        return float(text.replace(",", "."))
+    except ValueError:
+        return 0.0
 
 
-def read_electricity_demand(path: Path) -> list[float]:
-    # Read hourly electricity demand from CSV.
-    values = []
+def parse_timestamp(value: str) -> datetime:
+    text = str(value).strip()
+    if not text:
+        return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    dt = datetime.fromisoformat(text.replace(" ", "T"))
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def resolve_data_file(paths: list[Path]) -> Path:
+    for path in paths:
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"None of the solar data files were found: {paths}")
+
+
+def read_electricity_demand(path: Path) -> list[tuple[datetime, float]]:
+    values: list[tuple[datetime, float]] = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
+        timestamp_field = reader.fieldnames[0] if reader.fieldnames else ""
+        start_date = datetime(2022, 10, 25, tzinfo=timezone.utc)
+        end_date = datetime(2023, 10, 25, tzinfo=timezone.utc)
+
+        current_hour: datetime | None = None
+        current_hour_energy_wh = 0.0
         for row in reader:
-            values.append(parse_float(row[ELECTRICITY_COLUMN_NAME]))
+            timestamp = parse_timestamp(row[timestamp_field])
+            if not (start_date <= timestamp < end_date):
+                continue
+
+            hour_start = timestamp.replace(minute=0, second=0, microsecond=0)
+            if current_hour is None:
+                current_hour = hour_start
+            if hour_start != current_hour:
+                values.append((current_hour, current_hour_energy_wh / 1000.0))
+                current_hour = hour_start
+                current_hour_energy_wh = 0.0
+
+            current_hour_energy_wh += parse_float(row[ELECTRICITY_COLUMN_NAME])
+
+        if current_hour is not None:
+            values.append((current_hour, current_hour_energy_wh / 1000.0))
+
     return values
 
 
-def read_thermal_demand(path: Path) -> list[float]:
-    # Read hourly thermal demand and sum space and water heating.
-    values = []
+def read_thermal_demand(path: Path) -> list[tuple[datetime, float]]:
+    values: list[tuple[datetime, float]] = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
+            timestamp = parse_timestamp(row["utc_timestamp"])
             space = parse_float(row[THERMAL_SPACE_COLUMN])
             water = parse_float(row[THERMAL_WATER_COLUMN])
-            values.append(space + water)
+            values.append((timestamp, (space + water) / 1000.0))
     return values
 
 
-def read_solar_data(path: Path) -> list[tuple[float, float]]:
-    # Read hourly solar irradiance and ambient temperature data.
-    values = []
+def read_solar_data(path: Path) -> list[tuple[datetime, float, float]]:
+    values: list[tuple[datetime, float, float]] = []
     with path.open(newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
+            timestamp = parse_timestamp(row["timestamp"])
             irradiance = parse_float(row["I(t)_Wm2"])
             t_amb = parse_float(row["Tamb_C"])
-            values.append((irradiance, t_amb))
+            values.append((timestamp, irradiance, t_amb))
+    return values
+
+
+def load_heat_pump_cop_series(path: Path, column_name: str = HEAT_COP_ASHP_WATER_COLUMN) -> list[list[float]]:
+    values: list[list[float]] = []
+    with path.open(newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        day_values: list[float] = []
+        for row in reader:
+            day_values.append(parse_float(row.get(column_name, "0")))
+            if len(day_values) == 24:
+                values.append(day_values)
+                day_values = []
+        if day_values:
+            values.append(day_values)
     return values
 
 
@@ -116,11 +163,8 @@ def load_component_parameters(path: Path) -> dict:
         return json.load(jsonfile)
 
 
-def apply_component_parameters(config: dict) -> dict:
-    # Instantiate and return only enabled components from configuration.
-    # The 'enabled' flag is injected by apply_configuration() in
-    # Configurations/configurations.py.
-    components = {}
+def apply_component_parameters(config: dict, heat_pump_cop_series: list[list[float]] | None = None) -> dict:
+    components: dict[str, object] = {}
 
     if config["utility_grid"].get("enabled", True):
         components["grid"] = UtilityGrid(config["utility_grid"])
@@ -135,7 +179,7 @@ def apply_component_parameters(config: dict) -> dict:
         components["electric_boiler"] = ElectricBoiler(config["electric_boiler"])
 
     if config["heat_pump_air"].get("enabled", False):
-        components["heat_pump_air"] = HeatPumpAir(config["heat_pump_air"])
+        components["heat_pump_air"] = HeatPumpAir(config["heat_pump_air"], cop_series=heat_pump_cop_series)
 
     if config.get("BESS", {}).get("enabled", False):
         components["bess"] = BatteryStorage(config.get("BESS", {}))
@@ -147,92 +191,126 @@ def apply_component_parameters(config: dict) -> dict:
 
 
 def build_result_fields(components: dict) -> list[str]:
-    # Always-present columns.
     fields = [
-        "season",
+        "timestamp",
         "hour",
         "electricity_demand_kwh",
         "total_electricity_consumption_kwh",
         "thermal_demand_kwh",
         "grid_supply_kwh",
-        "grid_export_kwh",
-        "grid_revenue_eur",
-        "pv_cell_temp_c",
     ]
-    # Component-specific columns.
-    if "pv" in components:
-        fields.append("pv_output_kwh")
-    if "gas_boiler" in components:
-        fields += ["gas_boiler_heat_kwh", "cost_gas_boiler_eur", "emissions_gas_boiler_kg"]
-    if "electric_boiler" in components:
-        fields += ["electric_boiler_heat_kwh", "electric_boiler_electric_demand_kwh",
-                   "cost_electric_boiler_eur", "emissions_electric_boiler_kg"]
-    if "heat_pump_air" in components:
-        fields += ["heat_pump_heat_kwh", "heat_pump_electric_demand_kwh",
-                   "cost_heat_pump_eur", "emissions_heat_pump_kg"]
-    if "bess" in components:
-        fields += ["bess_soc_kwh", "bess_soc_pct", "bess_charge_kwh", "bess_discharge_kwh",
-                   "cost_bess_eur"]
-    if "tess" in components:
-        fields += ["tess_soc_kwh", "tess_soc_pct", "tess_charge_kwh", "tess_discharge_kwh",
-                   "cost_tess_eur", "emissions_tess_kg"]
-    # Cost and emission totals.
+
     fields += [
-        "cost_pv_capex_hour_eur",
-        "cost_pv_om_eur",
         "cost_grid_eur",
         "total_cost_hour_eur",
         "emissions_grid_kg",
         "total_emissions_hour_kg",
     ]
+
+    if "pv" in components:
+        fields += (
+            "pv_output_kwh",
+            "grid_export_kwh",
+            "grid_revenue_eur",
+            "pv_cell_temp_c",
+            "cost_pv_capex_hour_eur",
+            "cost_pv_om_eur",
+        )
+    if "gas_boiler" in components:
+        fields += ["gas_boiler_heat_kwh", "cost_gas_boiler_eur", "emissions_gas_boiler_kg"]
+    if "electric_boiler" in components:
+        fields += [
+            "electric_boiler_heat_kwh",
+            "electric_boiler_electric_demand_kwh",
+            "cost_electric_boiler_eur",
+            "emissions_electric_boiler_kg",
+        ]
+    if "heat_pump_air" in components:
+        fields += [
+            "heat_pump_heat_kwh",
+            "heat_pump_electric_demand_kwh",
+            "cost_heat_pump_eur",
+            "emissions_heat_pump_kg",
+        ]
+    if "bess" in components:
+        fields += ["bess_soc_kwh", "bess_soc_pct", "bess_charge_kwh", "bess_discharge_kwh", "cost_bess_eur"]
+    if "tess" in components:
+        fields += ["tess_soc_kwh", "tess_soc_pct", "tess_charge_kwh", "tess_discharge_kwh", "cost_tess_eur", "emissions_tess_kg"]
     return fields
 
 
+def format_hourly_output_row(row: dict) -> dict:
+    formatted_row: dict[str, object] = {}
+    for key, value in row.items():
+        if key == "timestamp":
+            try:
+                formatted_row[key] = datetime.fromisoformat(str(value)).strftime("%d.%m")
+            except ValueError:
+                formatted_row[key] = str(value)
+        elif key == "hour":
+            formatted_row[key] = f"{int(value):02d}:00"
+        elif key == "season":
+            continue
+        else:
+            formatted_row[key] = value
+    return formatted_row
+
+
 def write_hourly_results(path: Path, rows: list[dict], fields: list[str]) -> None:
-    # Write hourly results to a CSV file using the provided field list.
     path.parent.mkdir(parents=True, exist_ok=True)
+    formatted_rows = [format_hourly_output_row(row) for row in rows]
     with path.open("w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(formatted_rows)
 
 
-def write_annual_results(path: Path, summary: dict) -> None:
-    # Write annual summary results to a CSV file.
-    fieldnames = [
+def build_annual_result_fields(components: dict) -> list[str]:
+    fields = [
         "configuration",
         "configuration_label",
         "total_electricity_demand_kwh",
         "total_electricity_consumption_kwh",
         "total_thermal_demand_kwh",
-        "total_pv_generation_kwh",
-        "pv_self_consumption_fraction",
-        "annual_cost_pv_capex_eur",
-        "annual_cost_pv_om_eur",
         "annual_cost_grid_eur",
-        "annual_cost_gas_boiler_eur",
-        "annual_cost_electric_boiler_eur",
-        "annual_cost_heat_pump_eur",
-        "annual_cost_bess_eur",
-        "annual_cost_tess_eur",
-        "annual_revenue_grid_eur",
         "annual_cost_total_eur",
         "annual_emissions_grid_kg",
-        "annual_emissions_gas_boiler_kg",
-        "annual_emissions_electric_boiler_kg",
-        "annual_emissions_bess_kg",
-        "annual_emissions_tess_kg",
         "annual_emissions_total_kg",
     ]
+
+    if "pv" in components:
+        fields += [
+            "total_pv_generation_kwh",
+            "pv_self_consumption_fraction",
+            "annual_cost_pv_capex_eur",
+            "annual_cost_pv_om_eur",
+            "annual_revenue_grid_eur",
+        ]
+
+    if "gas_boiler" in components:
+        fields += ["annual_cost_gas_boiler_eur", "annual_emissions_gas_boiler_kg"]
+    if "electric_boiler" in components:
+        fields += ["annual_cost_electric_boiler_eur", "annual_emissions_electric_boiler_kg"]
+    if "heat_pump_air" in components:
+        fields += ["annual_cost_heat_pump_eur"]
+    if "bess" in components:
+        fields += ["annual_cost_bess_eur", "annual_emissions_bess_kg"]
+    if "tess" in components:
+        fields += ["annual_cost_tess_eur", "annual_emissions_tess_kg"]
+    return fields
+
+
+def write_annual_results(path: Path, summary: dict, components: dict) -> None:
+    fieldnames = build_annual_result_fields(components)
+    filtered_summary = {field: summary.get(field, 0.0) for field in fieldnames}
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
-        writer.writerow(summary)
+        writer.writerow(filtered_summary)
 
 
 def remove_existing_output_files() -> None:
-    # Clear all previous .pdf/.png figures and .csv tables before a fresh run.
     figures_dir = BASE_DIR / "Results" / "Figures"
     tables_dir = BASE_DIR / "Results" / "Tables"
     figures_dir.mkdir(parents=True, exist_ok=True)
@@ -254,23 +332,12 @@ def remove_existing_output_files() -> None:
             print(f"  warning: could not remove {tbl_file}: {exc}")
 
 
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
-
-def plot_seasonal_energy_diagrams(
-    hourly_results: list[dict],
-    components: dict,
-    config_name: str,
-) -> None:
-    season_order = ["Winter", "Spring", "Summer", "Autumn"]
-
+def plot_example_energy_diagrams(hourly_results: list[dict], components: dict, config_name: str, label: str) -> None:
     bar_width = 0.6
+    hours = np.array([r["hour"] for r in hourly_results], dtype=float)
+    config_label = CONFIG_LABELS.get(config_name, config_name)
 
-    elec_line_cols = [
-        "grid_supply_kwh",
-        "grid_export_kwh",
-    ]
+    elec_line_cols = ["grid_supply_kwh", "grid_export_kwh"]
     if "pv" in components:
         elec_line_cols.append("pv_output_kwh")
     if "heat_pump_air" in components:
@@ -281,7 +348,7 @@ def plot_seasonal_energy_diagrams(
         elec_line_cols.append("bess_charge_kwh")
         elec_line_cols.append("bess_discharge_kwh")
 
-    therm_line_cols = []
+    therm_line_cols: list[str] = []
     if "heat_pump_air" in components:
         therm_line_cols.append("heat_pump_heat_kwh")
     if "gas_boiler" in components:
@@ -293,239 +360,155 @@ def plot_seasonal_energy_diagrams(
         therm_line_cols.append("tess_discharge_kwh")
 
     legend_labels = {
-        "electricity_demand_kwh":              "Elec. demand",
-        "total_electricity_consumption_kwh":   "Total elec. (additional)",
-        "pv_output_kwh":                       "PV output",
-        "grid_supply_kwh":                     "Grid import",
-        "grid_export_kwh":                     "Grid export",
-        "heat_pump_electric_demand_kwh":       "HP elec.",
+        "electricity_demand_kwh": "Elec. demand",
+        "total_electricity_consumption_kwh": "Total elec. (additional)",
+        "pv_output_kwh": "PV output",
+        "grid_supply_kwh": "Grid import",
+        "grid_export_kwh": "Grid export",
+        "heat_pump_electric_demand_kwh": "HP elec.",
         "electric_boiler_electric_demand_kwh": "EB elec.",
-        "bess_charge_kwh":                     "BESS charge",
-        "bess_discharge_kwh":                  "BESS discharge",
-        "thermal_demand_kwh":                  "Thermal demand",
-        "heat_pump_heat_kwh":                  "HP heat",
-        "gas_boiler_heat_kwh":                 "Gas boiler",
-        "electric_boiler_heat_kwh":            "EB heat",
-        "tess_charge_kwh":                     "TESS charge",
-        "tess_discharge_kwh":                  "TESS discharge",
+        "bess_charge_kwh": "BESS charge",
+        "bess_discharge_kwh": "BESS discharge",
+        "thermal_demand_kwh": "Thermal demand",
+        "heat_pump_heat_kwh": "HP heat",
+        "gas_boiler_heat_kwh": "Gas boiler",
+        "electric_boiler_heat_kwh": "EB heat",
+        "tess_charge_kwh": "TESS charge",
+        "tess_discharge_kwh": "TESS discharge",
     }
 
     bar_colors = {
-        "electricity_demand_kwh":            "#1f77b4",
+        "electricity_demand_kwh": "#1f77b4",
         "total_electricity_consumption_kwh": "#ff7f0e",
-        "thermal_demand_kwh":                "#8c564b",
+        "thermal_demand_kwh": "#8c564b",
     }
 
     line_colors = {
-        "pv_output_kwh":                       "#f7c948",
-        "grid_supply_kwh":                     "#17becf",
-        "grid_export_kwh":                     "#aec7e8",
-        "heat_pump_electric_demand_kwh":       "#2ca02c",
+        "pv_output_kwh": "#f7c948",
+        "grid_supply_kwh": "#17becf",
+        "grid_export_kwh": "#aec7e8",
+        "heat_pump_electric_demand_kwh": "#2ca02c",
         "electric_boiler_electric_demand_kwh": "#d62728",
-        "bess_charge_kwh":                     "#9467bd",
-        "bess_discharge_kwh":                  "#c5b0d5",
-        "heat_pump_heat_kwh":                  "#e377c2",
-        "gas_boiler_heat_kwh":                 "#7f7f7f",
-        "electric_boiler_heat_kwh":            "#bcbd22",
-        "tess_charge_kwh":                     "#17becf",
-        "tess_discharge_kwh":                  "#9edae5",
+        "bess_charge_kwh": "#9467bd",
+        "bess_discharge_kwh": "#c5b0d5",
+        "heat_pump_heat_kwh": "#e377c2",
+        "gas_boiler_heat_kwh": "#7f7f7f",
+        "electric_boiler_heat_kwh": "#bcbd22",
+        "tess_charge_kwh": "#17becf",
+        "tess_discharge_kwh": "#9edae5",
     }
 
     line_styles = {
-        "pv_output_kwh":                       "-",
-        "grid_supply_kwh":                     "--",
-        "grid_export_kwh":                     "-.",
-        "heat_pump_electric_demand_kwh":       "-",
+        "pv_output_kwh": "-",
+        "grid_supply_kwh": "--",
+        "grid_export_kwh": "-.",
+        "heat_pump_electric_demand_kwh": "-",
         "electric_boiler_electric_demand_kwh": "--",
-        "bess_charge_kwh":                     "-",
-        "bess_discharge_kwh":                  "--",
-        "heat_pump_heat_kwh":                  "-",
-        "gas_boiler_heat_kwh":                 "--",
-        "electric_boiler_heat_kwh":            "-.",
-        "tess_charge_kwh":                     "-",
-        "tess_discharge_kwh":                  "--",
+        "bess_charge_kwh": "-",
+        "bess_discharge_kwh": "--",
+        "heat_pump_heat_kwh": "-",
+        "gas_boiler_heat_kwh": "--",
+        "electric_boiler_heat_kwh": "-.",
+        "tess_charge_kwh": "-",
+        "tess_discharge_kwh": "--",
     }
 
-    config_label = CONFIG_LABELS.get(config_name, config_name)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    elec_demand = np.array([r["electricity_demand_kwh"] for r in hourly_results])
+    total_elec = np.array([r["total_electricity_consumption_kwh"] for r in hourly_results])
+    extra_elec = np.maximum(0.0, total_elec - elec_demand)
 
-    for season in season_order:
-        season_rows = sorted(
-            [r for r in hourly_results if r["season"] == season],
-            key=lambda r: r["hour"],
-        )
-        if not season_rows:
-            continue
+    ax.bar(hours, elec_demand, width=bar_width, color=bar_colors["electricity_demand_kwh"], label=legend_labels["electricity_demand_kwh"], zorder=2)
+    ax.bar(hours, extra_elec, width=bar_width, bottom=elec_demand, color=bar_colors["total_electricity_consumption_kwh"], label=legend_labels["total_electricity_consumption_kwh"], zorder=2)
 
-        hours = np.array([r["hour"] for r in season_rows])
-        season_slug = season.lower()
+    for col in elec_line_cols:
+        values = -np.array([r[col] for r in hourly_results]) if col == "bess_discharge_kwh" else np.array([r[col] for r in hourly_results])
+        ax.plot(hours, values, label=legend_labels[col], color=line_colors[col], linestyle=line_styles[col], linewidth=2, zorder=3)
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+    ax.set_title(f"{config_label} | {label} | Electrical Energy")
+    ax.set_xlabel("Hour of day [h]")
+    ax.set_ylabel("Electrical energy [kWh]")
+    ax.set_xlim(-0.5, 23.5)
+    ax.set_ylim(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX)
+    ax.set_xticks(range(0, 24))
+    ax.set_yticks(np.arange(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX + 0.1, 1.0))
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="upper left", fontsize=10)
+    el_output = BASE_DIR / "Results" / "Figures" / f"{config_name}_{label}_el.pdf"
+    fig.tight_layout()
+    fig.savefig(el_output, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  diagram saved: {el_output}")
 
-        elec_demand = np.array([r["electricity_demand_kwh"] for r in season_rows])
-        total_elec  = np.array([r["total_electricity_consumption_kwh"] for r in season_rows])
-        extra_elec  = np.maximum(0.0, total_elec - elec_demand)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    thermal_demand = np.array([r["thermal_demand_kwh"] for r in hourly_results])
+    ax.bar(hours, thermal_demand, width=bar_width, color=bar_colors["thermal_demand_kwh"], label=legend_labels["thermal_demand_kwh"], zorder=2)
 
-        ax.bar(hours, elec_demand, width=bar_width,
-               color=bar_colors["electricity_demand_kwh"],
-               label=legend_labels["electricity_demand_kwh"],
-               zorder=2)
-        ax.bar(hours, extra_elec, width=bar_width,
-               bottom=elec_demand,
-               color=bar_colors["total_electricity_consumption_kwh"],
-               label=legend_labels["total_electricity_consumption_kwh"],
-               zorder=2)
+    for col in therm_line_cols:
+        values = -np.array([r[col] for r in hourly_results]) if col == "tess_discharge_kwh" else np.array([r[col] for r in hourly_results])
+        ax.plot(hours, values, label=legend_labels[col], color=line_colors[col], linestyle=line_styles[col], linewidth=2, zorder=3)
 
-        for col in elec_line_cols:
-            if col == "bess_discharge_kwh":
-                values = -np.array([r[col] for r in season_rows])
-            else:
-                values = np.array([r[col] for r in season_rows])
-            ax.plot(
-                hours, values,
-                label=legend_labels[col],
-                color=line_colors[col],
-                linestyle=line_styles[col],
-                linewidth=2,
-                zorder=3,
-            )
-
-        ax.set_title(f"{config_label} | {season} | Electrical Energy")
-        ax.set_xlabel("Hour of day [h]")
-        ax.set_ylabel("Electrical energy [kWh]")
-        ax.set_xlim(-0.5, 23.5)
-        ax.set_ylim(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX)
-        ax.set_xticks(range(0, 24))
-        ax.set_yticks(np.arange(-(ELECTRICAL_Y_MAX * 0.25), ELECTRICAL_Y_MAX + 0.1, 1.0))
-        ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
-        ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend(loc="upper left", fontsize=10)
-        el_output = (
-            BASE_DIR / "Results" / "Figures"
-            / f"{config_name}_{season_slug}_el.pdf"
-        )
-        fig.tight_layout()
-        fig.savefig(el_output, bbox_inches="tight")
-        plt.close(fig)
-        print(f"  diagram saved: {el_output}")
-
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        thermal_demand = np.array([r["thermal_demand_kwh"] for r in season_rows])
-        ax.bar(hours, thermal_demand, width=bar_width,
-               color=bar_colors["thermal_demand_kwh"],
-               label=legend_labels["thermal_demand_kwh"],
-               zorder=2)
-
-        for col in therm_line_cols:
-            if col == "tess_discharge_kwh":
-                values = -np.array([r[col] for r in season_rows])
-            else:
-                values = np.array([r[col] for r in season_rows])
-            ax.plot(
-                hours, values,
-                label=legend_labels[col],
-                color=line_colors[col],
-                linestyle=line_styles[col],
-                linewidth=2,
-                zorder=3,
-            )
-
-        ax.set_title(f"{config_label} | {season} | Thermal Energy")
-        ax.set_xlabel("Hour of day [h]")
-        ax.set_ylabel("Thermal energy [kWh]")
-        ax.set_xlim(-0.5, 23.5)
-        ax.set_ylim(-(THERMAL_Y_MAX * 0.25), THERMAL_Y_MAX)
-        ax.set_xticks(range(0, 24))
-        ax.set_yticks(np.arange(-(THERMAL_Y_MAX * 0.25), THERMAL_Y_MAX + 0.1, 2.0))
-        ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
-        ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend(loc="upper left", fontsize=10)
-        th_output = (
-            BASE_DIR / "Results" / "Figures"
-            / f"{config_name}_{season_slug}_th.pdf"
-        )
-        fig.tight_layout()
-        fig.savefig(th_output, bbox_inches="tight")
-        plt.close(fig)
-        print(f"  diagram saved: {th_output}")
+    ax.set_title(f"{config_label} | {label} | Thermal Energy")
+    ax.set_xlabel("Hour of day [h]")
+    ax.set_ylabel("Thermal energy [kWh]")
+    ax.set_xlim(-0.5, 23.5)
+    ax.set_ylim(-(THERMAL_Y_MAX * 0.5), THERMAL_Y_MAX)
+    ax.set_xticks(range(0, 24))
+    ax.set_yticks(np.arange(-(THERMAL_Y_MAX * 0.5), THERMAL_Y_MAX + 0.1, 2.0))
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="upper left", fontsize=10)
+    th_output = BASE_DIR / "Results" / "Figures" / f"{config_name}_{label}_th.pdf"
+    fig.tight_layout()
+    fig.savefig(th_output, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  diagram saved: {th_output}")
 
 
-def plot_soc_diagram(
-    hourly_results: list[dict],
-    components: dict,
-    config_name: str,
-) -> None:
+def plot_example_soc_diagram(hourly_results: list[dict], components: dict, config_name: str, label: str) -> None:
     has_bess = "bess" in components
     has_tess = "tess" in components
     if not has_bess and not has_tess:
         return
 
-    season_order = ["Winter", "Spring", "Summer", "Autumn"]
+    hours = np.array([r["hour"] for r in hourly_results], dtype=float)
     config_label = CONFIG_LABELS.get(config_name, config_name)
     bar_width = 0.35
 
-    for season in season_order:
-        season_rows = sorted(
-            [r for r in hourly_results if r["season"] == season],
-            key=lambda r: r["hour"],
-        )
-        if not season_rows:
-            continue
+    fig, ax = plt.subplots(figsize=(10, 6))
+    if has_bess and has_tess:
+        offset = bar_width / 2.0
+        ax.bar(hours - offset, [r["bess_soc_pct"] for r in hourly_results], width=bar_width, color="#9467bd", label="BESS SOC", zorder=2)
+        ax.bar(hours + offset, [r["tess_soc_pct"] for r in hourly_results], width=bar_width, color="#17becf", label="TESS SOC", zorder=2)
+    elif has_bess:
+        ax.bar(hours, [r["bess_soc_pct"] for r in hourly_results], width=bar_width * 1.5, color="#9467bd", label="BESS SOC", zorder=2)
+    else:
+        ax.bar(hours, [r["tess_soc_pct"] for r in hourly_results], width=bar_width * 1.5, color="#17becf", label="TESS SOC", zorder=2)
 
-        hours = np.array([r["hour"] for r in season_rows], dtype=float)
-        season_slug = season.lower()
+    ax.set_title(f"{config_label} | {label} | Storage SOC")
+    ax.set_xlabel("Hour of day [h]")
+    ax.set_ylabel("State of Charge [%]")
+    ax.set_xlim(-0.5, 23.5)
+    ax.set_ylim(0, 100)
+    ax.set_xticks(range(0, 24))
+    ax.set_yticks(range(0, 101, 10))
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.legend(loc="upper left", fontsize=10)
+    soc_output = BASE_DIR / "Results" / "Figures" / f"{config_name}_{label}_soc.pdf"
+    fig.tight_layout()
+    fig.savefig(soc_output, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  diagram saved: {soc_output}")
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-
-        if has_bess and has_tess:
-            offset = bar_width / 2.0
-            ax.bar(hours - offset,
-                   [r["bess_soc_pct"] for r in season_rows],
-                   width=bar_width, color="#9467bd", label="BESS SOC", zorder=2)
-            ax.bar(hours + offset,
-                   [r["tess_soc_pct"] for r in season_rows],
-                   width=bar_width, color="#17becf", label="TESS SOC", zorder=2)
-        elif has_bess:
-            ax.bar(hours,
-                   [r["bess_soc_pct"] for r in season_rows],
-                   width=bar_width * 1.5, color="#9467bd", label="BESS SOC", zorder=2)
-        else:
-            ax.bar(hours,
-                   [r["tess_soc_pct"] for r in season_rows],
-                   width=bar_width * 1.5, color="#17becf", label="TESS SOC", zorder=2)
-
-        ax.set_title(f"{config_label} | {season} | Storage SOC")
-        ax.set_xlabel("Hour of day [h]")
-        ax.set_ylabel("State of Charge [%]")
-        ax.set_xlim(-0.5, 23.5)
-        ax.set_ylim(0, 100)
-        ax.set_xticks(range(0, 24))
-        ax.set_yticks(range(0, 101, 10))
-        ax.grid(True, linestyle="--", alpha=0.4)
-        ax.legend(loc="upper left", fontsize=10)
-        soc_output = (
-            BASE_DIR / "Results" / "Figures"
-            / f"{config_name}_{season_slug}_soc.pdf"
-        )
-        fig.tight_layout()
-        fig.savefig(soc_output, bbox_inches="tight")
-        plt.close(fig)
-        print(f"  diagram saved: {soc_output}")
-
-
-# ---------------------------------------------------------------------------
-# Comparison
-# ---------------------------------------------------------------------------
 
 def collect_annual_results() -> list[dict]:
-    # Scan Results/Tables/ for all per-configuration annual_results_*.csv files.
     tables_dir = BASE_DIR / "Results" / "Tables"
     records = []
     files = sorted(tables_dir.glob("annual_results_*.csv"))
     if not files:
-        raise FileNotFoundError(
-            f"No annual_results_*.csv files found in {tables_dir}. Run main.py first."
-        )
+        raise FileNotFoundError(f"No annual_results_*.csv files found in {tables_dir}. Run main.py first.")
+
     for path in files:
         with path.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -534,16 +517,9 @@ def collect_annual_results() -> list[dict]:
                 records.append(
                     {
                         "config": config_name,
-                        "configuration_label": row.get(
-                            "configuration_label",
-                            CONFIG_LABELS.get(config_name, config_name),
-                        ),
-                        "annual_cost_total_eur": round(
-                            float(row.get("annual_cost_total_eur", 0.0)), 2
-                        ),
-                        "annual_emissions_total_kg": round(
-                            float(row.get("annual_emissions_total_kg", 0.0)), 2
-                        ),
+                        "configuration_label": row.get("configuration_label", CONFIG_LABELS.get(config_name, config_name)),
+                        "annual_cost_total_eur": round(float(row.get("annual_cost_total_eur", 0.0)), 2),
+                        "annual_emissions_total_kg": round(float(row.get("annual_emissions_total_kg", 0.0)), 2),
                     }
                 )
     return records
@@ -553,12 +529,7 @@ def write_comparison_table(records: list[dict]) -> Path:
     tables_dir = BASE_DIR / "Results" / "Tables"
     tables_dir.mkdir(parents=True, exist_ok=True)
     out_path = tables_dir / "system_comparison.csv"
-    fieldnames = [
-        "config",
-        "configuration_label",
-        "annual_cost_total_eur",
-        "annual_emissions_total_kg",
-    ]
+    fieldnames = ["config", "configuration_label", "annual_cost_total_eur", "annual_emissions_total_kg"]
     with out_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -579,13 +550,8 @@ def plot_comparison_chart(records: list[dict]) -> Path:
     x = np.arange(len(labels))
     bar_width = 0.6
 
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(max(12, len(labels) * 3.5), 6)
-    )
-
-    bars1 = ax1.bar(
-        x, costs, width=bar_width, color="#1f77b4", edgecolor="white", linewidth=0.6
-    )
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(max(12, len(labels) * 3.5), 6))
+    bars1 = ax1.bar(x, costs, width=bar_width, color="#1f77b4", edgecolor="white", linewidth=0.6)
     ax1.set_title("Annual Total Cost")
     ax1.set_ylabel("Cost [EUR/year]")
     ax1.set_xticks(x)
@@ -594,9 +560,7 @@ def plot_comparison_chart(records: list[dict]) -> Path:
     ax1.grid(axis="y", linestyle="--", alpha=0.4)
     ax1.set_axisbelow(True)
 
-    bars2 = ax2.bar(
-        x, emissions, width=bar_width, color="#2ca02c", edgecolor="white", linewidth=0.6
-    )
+    bars2 = ax2.bar(x, emissions, width=bar_width, color="#2ca02c", edgecolor="white", linewidth=0.6)
     ax2.set_title("Annual Total Emissions")
     ax2.set_ylabel("Emissions [kg CO2eq/year]")
     ax2.set_xticks(x)
@@ -620,20 +584,26 @@ def run_comparison() -> None:
     print(f"  {len(records)} configuration(s) compared.")
 
 
-# ---------------------------------------------------------------------------
-# Single-configuration simulation
-# ---------------------------------------------------------------------------
+def get_example_start_index(series: list[tuple[datetime, ...]], month: int, day: int) -> int:
+    for index, (timestamp, *_) in enumerate(series):
+        if timestamp.month == month and timestamp.day == day:
+            return index
+    raise ValueError(f"No data found for {month:02d}-{day:02d}")
 
-def run_single_configuration(
-    config_name: str,
-    base_component_config: dict,
-    all_solar_data: list[tuple[float, float]],
-) -> None:
-    component_config = apply_configuration(base_component_config, config_name)
-    components = apply_component_parameters(component_config)
-    annualization_factor = component_config["annualization"]["factor"]
-    result_fields = build_result_fields(components)
 
+def run_period_simulation(
+    components: dict,
+    annualization_factor: float,
+    electricity_series: list[tuple[datetime, float]],
+    thermal_series: list[tuple[datetime, float]],
+    solar_series: list[tuple[datetime, float, float]],
+    heat_pump_cop_series: list[list[float]],
+    start_index_electricity: int,
+    start_index_thermal: int,
+    start_index_solar: int,
+    length: int,
+    label: str | None = None,
+) -> list[dict]:
     grid = components.get("grid")
     pv = components.get("pv")
     gas_boiler = components.get("gas_boiler")
@@ -642,444 +612,388 @@ def run_single_configuration(
     bess = components.get("bess")
     tess = components.get("tess")
 
-    print(f"\n--- Configuration: {CONFIG_LABELS.get(config_name, config_name)} ---")
+    hourly_results: list[dict] = []
 
-    hourly_results = []
-    total_electricity_demand = 0.0
-    total_electricity_consumption = 0.0
-    total_thermal_demand = 0.0
-    total_pv_generation = 0.0
-    total_pv_used = 0.0
-    total_cost_pv_om = 0.0
-    total_cost_grid = 0.0
-    total_revenue_grid = 0.0
-    total_cost_gas_boiler = 0.0
-    total_cost_electric_boiler = 0.0
-    total_cost_heat_pump = 0.0
-    total_cost_bess = 0.0
-    total_cost_tess = 0.0
-    total_emissions_grid = 0.0
-    total_emissions_gas_boiler = 0.0
-    total_emissions_electric_boiler = 0.0
-    total_emissions_bess = 0.0
-    total_emissions_tess = 0.0
+    if bess:
+        bess.reset_soc()
+    if tess:
+        tess.reset_soc()
 
-    SEASON_HOUR_INDICES = [336, 2496, 4680, 6888]
+    for local_offset in range(length):
+        elec_idx = start_index_electricity + local_offset
+        thermal_idx = start_index_thermal + local_offset
+        solar_idx = start_index_solar + local_offset
+        hour_index = local_offset % 24
+        day_index = (start_index_thermal // 24) + (local_offset // 24)
 
-    for season_index, (season_name, electricity_path, thermal_path) in enumerate(SEASON_FILES):
-        electricity_demand = [
-            demand / 1000.0 for demand in read_electricity_demand(electricity_path)
-        ]
-        thermal_demand = [
-            demand / 1000.0 for demand in read_thermal_demand(thermal_path)
-        ]
+        electricity_timestamp, electricity_kwh = electricity_series[elec_idx]
+        _, thermal_kwh = thermal_series[thermal_idx]
+        _, irradiance, t_amb = solar_series[solar_idx]
 
-        start_hour = SEASON_HOUR_INDICES[season_index]
-        season_solar_data = all_solar_data[start_hour: start_hour + 24]
+        pv_output_kwh = 0.0
+        pv_cell_temp_c = 0.0
+        if pv:
+            pv_output_kwh = pv.calc_pv_output_kwh(irradiance, t_amb)
+            pv_cell_temp_c = pv.calc_pv_temperature(t_amb, irradiance)
 
-        for hour_index, (electricity_kwh, thermal_kwh) in enumerate(
-            zip(electricity_demand, thermal_demand)
-        ):
-            if hour_index < len(season_solar_data):
-                irradiance, t_amb = season_solar_data[hour_index]
+        gas_boiler_heat_kwh = 0.0
+        electric_boiler_heat_kwh = 0.0
+        heat_pump_heat_kwh = 0.0
+        heat_pump_electric_demand_kwh = 0.0
+        electric_boiler_electric_demand_kwh = 0.0
+
+        if heat_pump_air:
+            heat_pump_heat_kwh = thermal_kwh
+            heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(thermal_kwh, day_index, hour_index)
+        elif electric_boiler and not gas_boiler:
+            electric_boiler_heat_kwh = thermal_kwh
+        elif gas_boiler and not electric_boiler:
+            gas_boiler_heat_kwh = thermal_kwh
+        elif gas_boiler and electric_boiler:
+            electric_boiler_heat_kwh = thermal_kwh
+
+        if tess:
+            tess_discharge_kwh = tess.get_discharge_for_demand(thermal_kwh)
+            tess_heat_supplied = tess.get_heat_from_discharge(tess_discharge_kwh)
+            remaining_thermal_demand = max(0.0, thermal_kwh - tess_heat_supplied)
+        else:
+            tess_discharge_kwh = 0.0
+            tess_heat_supplied = 0.0
+            remaining_thermal_demand = thermal_kwh
+
+        if heat_pump_air:
+            heat_pump_heat_kwh = remaining_thermal_demand
+        elif electric_boiler and not gas_boiler:
+            electric_boiler_heat_kwh = remaining_thermal_demand
+        elif gas_boiler and not electric_boiler:
+            gas_boiler_heat_kwh = remaining_thermal_demand
+        elif gas_boiler and electric_boiler:
+            electric_boiler_heat_kwh = remaining_thermal_demand
+
+        tess_charge_kwh = 0.0
+        if tess and tess.available_charge_capacity_kwh() > 0.0:
+            tess_charge_kwh = tess.get_charge_from_heat_source(heat_pump_heat_kwh + electric_boiler_heat_kwh + gas_boiler_heat_kwh)
+            if tess_charge_kwh > 0.0:
+                if heat_pump_air:
+                    heat_pump_heat_kwh += tess_charge_kwh
+                elif electric_boiler and not gas_boiler:
+                    electric_boiler_heat_kwh += tess_charge_kwh
+                elif gas_boiler and not electric_boiler:
+                    gas_boiler_heat_kwh += tess_charge_kwh
+                elif gas_boiler and electric_boiler:
+                    electric_boiler_heat_kwh += tess_charge_kwh
+
+        if electric_boiler and electric_boiler_heat_kwh > 0:
+            electric_boiler_electric_demand_kwh = electric_boiler.get_electricity_demand_kwh(electric_boiler_heat_kwh)
+
+        if heat_pump_air:
+            heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(heat_pump_heat_kwh, day_index, hour_index)
+
+        if tess:
+            tess.update_state(q_tess_in=tess_charge_kwh, q_tess_out=tess_discharge_kwh)
+            tess_soc_kwh = tess.soc
+            tess_soc_pct = tess.soc_pct
+        else:
+            tess_soc_kwh = 0.0
+            tess_soc_pct = 0.0
+
+        total_electricity_consumption_kwh = electricity_kwh + electric_boiler_electric_demand_kwh + heat_pump_electric_demand_kwh
+        bess_charge_kwh = 0.0
+        bess_discharge_kwh = 0.0
+        if bess:
+            if hour_index == 0:
+                bess.reset_soc()
+            if pv_output_kwh > total_electricity_consumption_kwh:
+                surplus = pv_output_kwh - total_electricity_consumption_kwh
+                max_charge_kwh = min(surplus, bess.P_max, bess.available_charge_capacity_kwh() / bess.eta_char)
+                bess_charge_kwh = max(0.0, max_charge_kwh)
+                bess.apply_self_discharge()
+                bess.soc += bess.get_charge_energy_input(bess_charge_kwh)
+            elif pv_output_kwh < total_electricity_consumption_kwh:
+                deficit = total_electricity_consumption_kwh - pv_output_kwh
+                max_discharge_kwh = min(deficit, bess.P_max, bess.available_discharge_capacity_kwh() * bess.eta_disc)
+                bess_discharge_kwh = max(0.0, max_discharge_kwh)
+                bess.apply_self_discharge()
+                bess.soc -= bess.get_discharge_energy_output(bess_discharge_kwh)
             else:
-                irradiance, t_amb = 0.0, 20.0
+                bess.apply_self_discharge()
 
-            # PV output
-            pv_output_kwh = 0.0
-            pv_cell_temp_c = 0.0
-            if pv:
-                pv_output_kwh = pv.calc_pv_output_kwh(irradiance, t_amb)
-                pv_cell_temp_c = pv.calc_pv_temperature(t_amb, irradiance)
+            bess.clamp_soc()
+            grid_supply_kwh = max(0.0, total_electricity_consumption_kwh - pv_output_kwh - bess_discharge_kwh)
+            grid_export_kwh = max(0.0, pv_output_kwh - total_electricity_consumption_kwh - bess_charge_kwh)
+        else:
+            grid_supply_kwh = max(0.0, total_electricity_consumption_kwh - pv_output_kwh)
+            grid_export_kwh = max(0.0, pv_output_kwh - total_electricity_consumption_kwh)
 
-            # Thermal energy balance
-            gas_boiler_heat_kwh = 0.0
-            electric_boiler_heat_kwh = 0.0
-            heat_pump_heat_kwh = 0.0
-            heat_pump_electric_demand_kwh = 0.0
-            electric_boiler_electric_demand_kwh = 0.0
+        pv_used_kwh = pv_output_kwh - grid_export_kwh
+        bess_soc_kwh = bess.soc if bess else 0.0
+        bess_soc_pct = bess.soc_pct if bess else 0.0
 
-            if heat_pump_air:
-                heat_pump_heat_kwh = thermal_kwh
-                heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
-                    thermal_kwh, season_index, hour_index
-                )
-            elif electric_boiler and not gas_boiler:
-                electric_boiler_heat_kwh = thermal_kwh
-            elif gas_boiler and not electric_boiler:
-                gas_boiler_heat_kwh = thermal_kwh
-            elif gas_boiler and electric_boiler:
-                electric_boiler_heat_kwh = thermal_kwh
+        if hour_index == 23:
+            if bess:
+                bess_delta_kwh = bess.force_soc_to_target()
+                if bess_delta_kwh > 0.0:
+                    grid_supply_kwh += bess_delta_kwh
+                    total_electricity_consumption_kwh += bess_delta_kwh
+                elif bess_delta_kwh < 0.0:
+                    grid_export_kwh += abs(bess_delta_kwh)
+                bess_soc_kwh = bess.soc
+                bess_soc_pct = bess.soc_pct
 
             if tess:
-                if hour_index == 0:
-                    tess.reset_soc()
-                tess_discharge_kwh = tess.get_discharge_for_demand(thermal_kwh)
-                tess_heat_supplied = tess.get_heat_from_discharge(tess_discharge_kwh)
-                remaining_thermal_demand = max(0.0, thermal_kwh - tess_heat_supplied)
-            else:
-                tess_discharge_kwh = 0.0
-                tess_heat_supplied = 0.0
-                remaining_thermal_demand = thermal_kwh
-
-            if heat_pump_air:
-                heat_pump_heat_kwh = remaining_thermal_demand
-            elif electric_boiler and not gas_boiler:
-                electric_boiler_heat_kwh = remaining_thermal_demand
-            elif gas_boiler and not electric_boiler:
-                gas_boiler_heat_kwh = remaining_thermal_demand
-            elif gas_boiler and electric_boiler:
-                electric_boiler_heat_kwh = remaining_thermal_demand
-
-            tess_charge_kwh = 0.0
-            if tess and tess.available_charge_capacity_kwh() > 0.0:
-                tess_charge_kwh = tess.get_charge_from_heat_source(
-                    heat_pump_heat_kwh + electric_boiler_heat_kwh + gas_boiler_heat_kwh
-                )
-                if tess_charge_kwh > 0.0:
+                tess_delta_kwh = tess.force_soc_to_target()
+                if tess_delta_kwh > 0.0:
+                    thermal_kwh += tess_delta_kwh
                     if heat_pump_air:
-                        heat_pump_heat_kwh += tess_charge_kwh
+                        heat_pump_heat_kwh += tess_delta_kwh
+                        heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(heat_pump_heat_kwh, day_index, hour_index)
+                        total_electricity_consumption_kwh += heat_pump_air.get_electricity_demand_kwh(tess_delta_kwh, day_index, hour_index)
                     elif electric_boiler and not gas_boiler:
-                        electric_boiler_heat_kwh += tess_charge_kwh
-                    elif gas_boiler and not electric_boiler:
-                        gas_boiler_heat_kwh += tess_charge_kwh
-                    elif gas_boiler and electric_boiler:
-                        electric_boiler_heat_kwh += tess_charge_kwh
-
-            if electric_boiler and electric_boiler_heat_kwh > 0:
-                electric_boiler_electric_demand_kwh = electric_boiler.get_electricity_demand_kwh(
-                    electric_boiler_heat_kwh
-                )
-
-            if heat_pump_air:
-                heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
-                    heat_pump_heat_kwh, season_index, hour_index
-                )
-
-            if tess:
-                tess.update_state(q_tess_in=tess_charge_kwh, q_tess_out=tess_discharge_kwh)
+                        electric_boiler_heat_kwh += tess_delta_kwh
+                        extra_elec = electric_boiler.get_electricity_demand_kwh(tess_delta_kwh)
+                        electric_boiler_electric_demand_kwh += extra_elec
+                        total_electricity_consumption_kwh += extra_elec
+                    elif gas_boiler:
+                        gas_boiler_heat_kwh += tess_delta_kwh
                 tess_soc_kwh = tess.soc
                 tess_soc_pct = tess.soc_pct
-            else:
-                tess_soc_kwh = 0.0
-                tess_soc_pct = 0.0
 
-            # Electricity energy balance
-            total_electricity_consumption_kwh = (
-                electricity_kwh
-                + electric_boiler_electric_demand_kwh
-                + heat_pump_electric_demand_kwh
-            )
-            bess_charge_kwh = 0.0
-            bess_discharge_kwh = 0.0
-            if bess:
-                if hour_index == 0:
-                    bess.reset_soc()
+        cost_pv_capex_hour_eur = 0.0
+        cost_pv_om_eur = 0.0
+        if pv:
+            cost_pv_capex_hour_eur = pv.get_capex_hour_eur(annualization_factor)
+            cost_pv_om_eur = pv.get_om_cost_eur(pv_output_kwh)
 
-                if pv_output_kwh > total_electricity_consumption_kwh:
-                    surplus = pv_output_kwh - total_electricity_consumption_kwh
-                    max_charge_kw = min(
-                        surplus,
-                        bess.P_max,
-                        bess.available_charge_capacity_kwh() / bess.eta_char,
-                    )
-                    bess_charge_kwh = max(0.0, max_charge_kw)
-                    bess.apply_self_discharge()
-                    bess.soc += bess.get_charge_energy_input(bess_charge_kwh)
-                elif pv_output_kwh < total_electricity_consumption_kwh:
-                    deficit = total_electricity_consumption_kwh - pv_output_kwh
-                    max_discharge_kw = min(
-                        deficit,
-                        bess.P_max,
-                        bess.available_discharge_capacity_kwh() * bess.eta_disc,
-                    )
-                    bess_discharge_kwh = max(0.0, max_discharge_kw)
-                    bess.apply_self_discharge()
-                    bess.soc -= bess.get_discharge_energy_output(bess_discharge_kwh)
-                else:
-                    bess.apply_self_discharge()
+        cost_grid_eur = 0.0
+        grid_revenue_eur = 0.0
+        if grid:
+            cost_grid_eur = grid.get_cost_eur(grid_supply_kwh)
+            grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
 
-                bess.clamp_soc()
-                grid_supply_kwh = max(
-                    0.0,
-                    total_electricity_consumption_kwh - pv_output_kwh - bess_discharge_kwh,
-                )
-                grid_export_kwh = max(
-                    0.0,
-                    pv_output_kwh - total_electricity_consumption_kwh - bess_charge_kwh,
-                )
-            else:
-                grid_supply_kwh = max(0.0, total_electricity_consumption_kwh - pv_output_kwh)
-                grid_export_kwh = max(0.0, pv_output_kwh - total_electricity_consumption_kwh)
+        cost_gas_boiler_eur = 0.0
+        if gas_boiler:
+            cost_gas_boiler_eur = gas_boiler.get_cost_eur(gas_boiler_heat_kwh)
 
-            pv_used_kwh = pv_output_kwh - grid_export_kwh
-            bess_soc_kwh = bess.soc if bess else 0.0
-            bess_soc_pct = bess.soc_pct if bess else 0.0
+        cost_electric_boiler_eur = 0.0
+        if electric_boiler:
+            cost_electric_boiler_eur = electric_boiler.get_cost_eur(electric_boiler_heat_kwh)
 
-            # End-of-day SOC restoration (hour 23)
-            if hour_index == 23:
-                if bess:
-                    bess_delta_kwh = bess.force_soc_to_target()
-                    if bess_delta_kwh > 0.0:
-                        grid_supply_kwh += bess_delta_kwh
-                        total_electricity_consumption_kwh += bess_delta_kwh
-                    elif bess_delta_kwh < 0.0:
-                        grid_export_kwh += abs(bess_delta_kwh)
-                    bess_soc_kwh = bess.soc
-                    bess_soc_pct = bess.soc_pct
+        cost_heat_pump_eur = 0.0
+        if heat_pump_air:
+            cost_heat_pump_eur = heat_pump_air.get_cost_eur(heat_pump_heat_kwh)
 
-                if tess:
-                    tess_delta_kwh = tess.force_soc_to_target()
-                    if tess_delta_kwh > 0.0:
-                        thermal_kwh += tess_delta_kwh
-                        if heat_pump_air:
-                            heat_pump_heat_kwh += tess_delta_kwh
-                            heat_pump_electric_demand_kwh = heat_pump_air.get_electricity_demand_kwh(
-                                heat_pump_heat_kwh, season_index, hour_index
-                            )
-                            total_electricity_consumption_kwh += heat_pump_air.get_electricity_demand_kwh(
-                                tess_delta_kwh, season_index, hour_index
-                            )
-                        elif electric_boiler and not gas_boiler:
-                            electric_boiler_heat_kwh += tess_delta_kwh
-                            extra_elec = electric_boiler.get_electricity_demand_kwh(tess_delta_kwh)
-                            electric_boiler_electric_demand_kwh += extra_elec
-                            total_electricity_consumption_kwh += extra_elec
-                        elif gas_boiler:
-                            gas_boiler_heat_kwh += tess_delta_kwh
-                    tess_soc_kwh = tess.soc
-                    tess_soc_pct = tess.soc_pct
+        cost_bess_eur = 0.0
+        if bess:
+            cost_bess_eur = bess.get_cost_eur(bess_discharge_kwh)
 
-            # Costs
-            cost_pv_capex_hour_eur = 0.0
-            cost_pv_om_eur = 0.0
-            if pv:
-                cost_pv_capex_hour_eur = pv.get_capex_hour_eur(annualization_factor)
-                cost_pv_om_eur = pv.get_om_cost_eur(pv_output_kwh)
+        cost_tess_eur = 0.0
+        if tess:
+            cost_tess_eur = tess.get_cost_eur(tess_discharge_kwh)
 
-            cost_grid_eur = 0.0
-            grid_revenue_eur = 0.0
-            if grid:
-                cost_grid_eur = grid.get_cost_eur(grid_supply_kwh)
-                grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
+        total_cost_hour_eur = (
+            cost_pv_capex_hour_eur + cost_pv_om_eur + cost_grid_eur - grid_revenue_eur + cost_gas_boiler_eur + cost_electric_boiler_eur + cost_heat_pump_eur + cost_bess_eur + cost_tess_eur
+        )
 
-            cost_gas_boiler_eur = 0.0
-            if gas_boiler:
-                cost_gas_boiler_eur = gas_boiler.get_cost_eur(gas_boiler_heat_kwh)
+        emissions_grid_kg = grid.get_emissions_kg(grid_supply_kwh) if grid else 0.0
+        emissions_gas_boiler_kg = gas_boiler.get_emissions_kg(gas_boiler_heat_kwh) if gas_boiler else 0.0
+        emissions_electric_boiler_kg = electric_boiler.get_emissions_kg(electric_boiler_heat_kwh) if electric_boiler else 0.0
+        emissions_heat_pump_kg = 0.0
+        emissions_bess_kg = 0.0
+        emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh) if tess else 0.0
+        total_emissions_hour_kg = emissions_grid_kg + emissions_gas_boiler_kg + emissions_electric_boiler_kg + emissions_heat_pump_kg + emissions_bess_kg + emissions_tess_kg
 
-            cost_electric_boiler_eur = 0.0
-            if electric_boiler:
-                cost_electric_boiler_eur = electric_boiler.get_cost_eur(electric_boiler_heat_kwh)
+        hourly_results.append(
+            {
+                "timestamp": electricity_timestamp.isoformat(),
+                "season": label or "",
+                "hour": hour_index,
+                "electricity_demand_kwh": round(electricity_kwh, 4),
+                "total_electricity_consumption_kwh": round(total_electricity_consumption_kwh, 4),
+                "heat_pump_heat_kwh": round(heat_pump_heat_kwh, 4),
+                "heat_pump_electric_demand_kwh": round(heat_pump_electric_demand_kwh, 4),
+                "electric_boiler_electric_demand_kwh": round(electric_boiler_electric_demand_kwh, 4),
+                "thermal_demand_kwh": round(thermal_kwh, 4),
+                "pv_output_kwh": round(pv_output_kwh, 4),
+                "grid_export_kwh": round(grid_export_kwh, 4),
+                "grid_revenue_eur": round(grid_revenue_eur, 4),
+                "pv_cell_temp_c": round(pv_cell_temp_c, 2),
+                "grid_supply_kwh": round(grid_supply_kwh, 4),
+                "gas_boiler_heat_kwh": round(gas_boiler_heat_kwh, 4),
+                "electric_boiler_heat_kwh": round(electric_boiler_heat_kwh, 4),
+                "bess_soc_kwh": round(bess_soc_kwh, 4),
+                "bess_soc_pct": round(bess_soc_pct, 2),
+                "bess_charge_kwh": round(bess_charge_kwh, 4),
+                "bess_discharge_kwh": round(bess_discharge_kwh, 4),
+                "tess_soc_kwh": round(tess_soc_kwh, 4),
+                "tess_soc_pct": round(tess_soc_pct, 2),
+                "tess_charge_kwh": round(tess_charge_kwh, 4),
+                "tess_discharge_kwh": round(tess_discharge_kwh, 4),
+                "cost_pv_capex_hour_eur": round(cost_pv_capex_hour_eur, 4),
+                "cost_pv_om_eur": round(cost_pv_om_eur, 4),
+                "cost_grid_eur": round(cost_grid_eur, 4),
+                "cost_gas_boiler_eur": round(cost_gas_boiler_eur, 4),
+                "cost_electric_boiler_eur": round(cost_electric_boiler_eur, 4),
+                "cost_heat_pump_eur": round(cost_heat_pump_eur, 4),
+                "cost_bess_eur": round(cost_bess_eur, 4),
+                "cost_tess_eur": round(cost_tess_eur, 4),
+                "total_cost_hour_eur": round(total_cost_hour_eur, 4),
+                "emissions_grid_kg": round(emissions_grid_kg, 4),
+                "emissions_gas_boiler_kg": round(emissions_gas_boiler_kg, 4),
+                "emissions_electric_boiler_kg": round(emissions_electric_boiler_kg, 4),
+                "emissions_heat_pump_kg": round(emissions_heat_pump_kg, 4),
+                "emissions_bess_kg": round(emissions_bess_kg, 4),
+                "emissions_tess_kg": round(emissions_tess_kg, 4),
+                "total_emissions_hour_kg": round(total_emissions_hour_kg, 4),
+            }
+        )
 
-            cost_heat_pump_eur = 0.0
-            if heat_pump_air:
-                cost_heat_pump_eur = heat_pump_air.get_cost_eur(heat_pump_heat_kwh)
+    return hourly_results
 
-            cost_bess_eur = 0.0
-            if bess:
-                cost_bess_eur = bess.get_cost_eur(bess_discharge_kwh)
 
-            cost_tess_eur = 0.0
-            if tess:
-                cost_tess_eur = tess.get_cost_eur(tess_discharge_kwh)
+def run_single_configuration(
+    config_name: str,
+    base_component_config: dict,
+    electricity_series: list[tuple[datetime, float]],
+    thermal_series: list[tuple[datetime, float]],
+    solar_series: list[tuple[datetime, float, float]],
+    heat_pump_cop_series: list[list[float]],
+) -> None:
+    component_config = apply_configuration(base_component_config, config_name)
+    components = apply_component_parameters(component_config, heat_pump_cop_series=heat_pump_cop_series)
+    annualization_factor = component_config["annualization"]["factor"]
+    result_fields = build_result_fields(components)
 
-            total_cost_hour_eur = (
-                cost_pv_capex_hour_eur
-                + cost_pv_om_eur
-                + cost_grid_eur
-                - grid_revenue_eur
-                + cost_gas_boiler_eur
-                + cost_electric_boiler_eur
-                + cost_heat_pump_eur
-                + cost_bess_eur
-                + cost_tess_eur
-            )
+    print(f"\n--- Configuration: {CONFIG_LABELS.get(config_name, config_name)} ---")
 
-            # Emissions
-            emissions_grid_kg = grid.get_emissions_kg(grid_supply_kwh) if grid else 0.0
-            emissions_gas_boiler_kg = gas_boiler.get_emissions_kg(gas_boiler_heat_kwh) if gas_boiler else 0.0
-            emissions_electric_boiler_kg = (
-                electric_boiler.get_emissions_kg(electric_boiler_heat_kwh)
-                if electric_boiler else 0.0
-            )
-            emissions_heat_pump_kg = 0.0
-            emissions_bess_kg = 0.0
-            emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh) if tess else 0.0
-
-            total_emissions_hour_kg = (
-                emissions_grid_kg
-                + emissions_gas_boiler_kg
-                + emissions_electric_boiler_kg
-                + emissions_heat_pump_kg
-                + emissions_bess_kg
-                + emissions_tess_kg
-            )
-
-            # Accumulate
-            total_electricity_demand += electricity_kwh
-            total_electricity_consumption += total_electricity_consumption_kwh
-            total_thermal_demand += thermal_kwh
-            total_pv_generation += pv_output_kwh
-            total_pv_used += pv_used_kwh
-            total_cost_pv_om += cost_pv_om_eur
-            total_cost_grid += cost_grid_eur
-            total_revenue_grid += grid_revenue_eur
-            total_cost_gas_boiler += cost_gas_boiler_eur
-            total_cost_electric_boiler += cost_electric_boiler_eur
-            total_cost_heat_pump += cost_heat_pump_eur
-            total_cost_bess += cost_bess_eur
-            total_cost_tess += cost_tess_eur
-            total_emissions_grid += emissions_grid_kg
-            total_emissions_gas_boiler += emissions_gas_boiler_kg
-            total_emissions_electric_boiler += emissions_electric_boiler_kg
-            total_emissions_bess += emissions_bess_kg
-            total_emissions_tess += emissions_tess_kg
-
-            hourly_results.append(
-                {
-                    "season": season_name,
-                    "hour": hour_index,
-                    "electricity_demand_kwh":              round(electricity_kwh, 4),
-                    "total_electricity_consumption_kwh":   round(total_electricity_consumption_kwh, 4),
-                    "heat_pump_heat_kwh":                  round(heat_pump_heat_kwh, 4),
-                    "heat_pump_electric_demand_kwh":       round(heat_pump_electric_demand_kwh, 4),
-                    "electric_boiler_electric_demand_kwh": round(electric_boiler_electric_demand_kwh, 4),
-                    "thermal_demand_kwh":                  round(thermal_kwh, 4),
-                    "pv_output_kwh":                       round(pv_output_kwh, 4),
-                    "grid_export_kwh":                     round(grid_export_kwh, 4),
-                    "grid_revenue_eur":                    round(grid_revenue_eur, 4),
-                    "pv_cell_temp_c":                      round(pv_cell_temp_c, 2),
-                    "grid_supply_kwh":                     round(grid_supply_kwh, 4),
-                    "gas_boiler_heat_kwh":                 round(gas_boiler_heat_kwh, 4),
-                    "electric_boiler_heat_kwh":            round(electric_boiler_heat_kwh, 4),
-                    "bess_soc_kwh":                        round(bess_soc_kwh, 4),
-                    "bess_soc_pct":                        round(bess_soc_pct, 2),
-                    "bess_charge_kwh":                     round(bess_charge_kwh, 4),
-                    "bess_discharge_kwh":                  round(bess_discharge_kwh, 4),
-                    "tess_soc_kwh":                        round(tess_soc_kwh, 4),
-                    "tess_soc_pct":                        round(tess_soc_pct, 2),
-                    "tess_charge_kwh":                     round(tess_charge_kwh, 4),
-                    "tess_discharge_kwh":                  round(tess_discharge_kwh, 4),
-                    "cost_pv_capex_hour_eur":              round(cost_pv_capex_hour_eur, 4),
-                    "cost_pv_om_eur":                      round(cost_pv_om_eur, 4),
-                    "cost_grid_eur":                       round(cost_grid_eur, 4),
-                    "cost_gas_boiler_eur":                 round(cost_gas_boiler_eur, 4),
-                    "cost_electric_boiler_eur":            round(cost_electric_boiler_eur, 4),
-                    "cost_heat_pump_eur":                  round(cost_heat_pump_eur, 4),
-                    "cost_bess_eur":                       round(cost_bess_eur, 4),
-                    "cost_tess_eur":                       round(cost_tess_eur, 4),
-                    "total_cost_hour_eur":                 round(total_cost_hour_eur, 4),
-                    "emissions_grid_kg":                   round(emissions_grid_kg, 4),
-                    "emissions_gas_boiler_kg":             round(emissions_gas_boiler_kg, 4),
-                    "emissions_electric_boiler_kg":        round(emissions_electric_boiler_kg, 4),
-                    "emissions_heat_pump_kg":              round(emissions_heat_pump_kg, 4),
-                    "emissions_bess_kg":                   round(emissions_bess_kg, 4),
-                    "emissions_tess_kg":                   round(emissions_tess_kg, 4),
-                    "total_emissions_hour_kg":             round(total_emissions_hour_kg, 4),
-                }
-            )
-
-    # Annual aggregates
-    annual_electricity_demand      = total_electricity_demand * annualization_factor
-    annual_electricity_consumption = total_electricity_consumption * annualization_factor
-    annual_thermal_demand          = total_thermal_demand * annualization_factor
-    annual_pv_generation           = total_pv_generation * annualization_factor
-    pv_self_consumption_fraction   = (
-        total_pv_used / total_pv_generation if total_pv_generation > 0 else 0.0
-    )
-    annual_cost_pv_capex_total  = pv.capex_total_eur if pv else 0.0
-    annual_cost_pv_om           = total_cost_pv_om * annualization_factor
-    annual_cost_grid            = total_cost_grid * annualization_factor
-    annual_revenue_grid         = total_revenue_grid * annualization_factor
-    annual_cost_gas_boiler      = total_cost_gas_boiler * annualization_factor
-    annual_cost_electric_boiler = total_cost_electric_boiler * annualization_factor
-    annual_cost_heat_pump       = total_cost_heat_pump * annualization_factor
-    annual_cost_bess            = total_cost_bess * annualization_factor
-    annual_cost_tess            = total_cost_tess * annualization_factor
-    annual_cost_total = (
-        annual_cost_pv_capex_total
-        + annual_cost_pv_om
-        + annual_cost_grid
-        - annual_revenue_grid
-        + annual_cost_gas_boiler
-        + annual_cost_electric_boiler
-        + annual_cost_heat_pump
-        + annual_cost_bess
-        + annual_cost_tess
-    )
-    annual_emissions_grid            = total_emissions_grid * annualization_factor
-    annual_emissions_gas_boiler      = total_emissions_gas_boiler * annualization_factor
-    annual_emissions_electric_boiler = total_emissions_electric_boiler * annualization_factor
-    annual_emissions_bess            = bess.CO2eq_BES_annual if bess else 0.0
-    annual_emissions_tess            = total_emissions_tess * annualization_factor
-    annual_emissions_total = (
-        annual_emissions_grid
-        + annual_emissions_gas_boiler
-        + annual_emissions_electric_boiler
-        + annual_emissions_bess
-        + annual_emissions_tess
+    full_year_results = run_period_simulation(
+        components,
+        annualization_factor,
+        electricity_series,
+        thermal_series,
+        solar_series,
+        heat_pump_cop_series,
+        start_index_electricity=0,
+        start_index_thermal=0,
+        start_index_solar=0,
+        length=len(electricity_series),
+        label=None,
     )
 
-    output_file = (
-        BASE_DIR / "Results" / "Tables"
-        / f"hourly_results_{config_name}.csv"
-    )
-    annual_output_file = (
-        BASE_DIR / "Results" / "Tables" / f"annual_results_{config_name}.csv"
-    )
+    total_electricity_demand = sum(r["electricity_demand_kwh"] for r in full_year_results)
+    total_electricity_consumption = sum(r["total_electricity_consumption_kwh"] for r in full_year_results)
+    total_thermal_demand = sum(r["thermal_demand_kwh"] for r in full_year_results)
+    total_pv_generation = sum(r["pv_output_kwh"] for r in full_year_results) if "pv_output_kwh" in full_year_results[0] else 0.0
+    total_pv_used = sum(max(0.0, r["pv_output_kwh"] - r["grid_export_kwh"]) for r in full_year_results) if "pv_output_kwh" in full_year_results[0] else 0.0
+    total_cost_pv_om = sum(r["cost_pv_om_eur"] for r in full_year_results) if "cost_pv_om_eur" in full_year_results[0] else 0.0
+    total_cost_pv_capex = sum(r["cost_pv_capex_hour_eur"] for r in full_year_results) if "cost_pv_capex_hour_eur" in full_year_results[0] else 0.0
+    total_cost_grid = sum(r["cost_grid_eur"] for r in full_year_results) if "cost_grid_eur" in full_year_results[0] else 0.0
+    total_revenue_grid = sum(r["grid_revenue_eur"] for r in full_year_results) if "grid_revenue_eur" in full_year_results[0] else 0.0
+    total_cost_gas_boiler = sum(r["cost_gas_boiler_eur"] for r in full_year_results) if "cost_gas_boiler_eur" in full_year_results[0] else 0.0
+    total_cost_electric_boiler = sum(r["cost_electric_boiler_eur"] for r in full_year_results) if "cost_electric_boiler_eur" in full_year_results[0] else 0.0
+    total_cost_heat_pump = sum(r["cost_heat_pump_eur"] for r in full_year_results) if "cost_heat_pump_eur" in full_year_results[0] else 0.0
+    total_cost_bess = sum(r["cost_bess_eur"] for r in full_year_results) if "cost_bess_eur" in full_year_results[0] else 0.0
+    total_cost_tess = sum(r["cost_tess_eur"] for r in full_year_results) if "cost_tess_eur" in full_year_results[0] else 0.0
+    total_emissions_grid = sum(r["emissions_grid_kg"] for r in full_year_results) if "emissions_grid_kg" in full_year_results[0] else 0.0
+    total_emissions_gas_boiler = sum(r["emissions_gas_boiler_kg"] for r in full_year_results) if "emissions_gas_boiler_kg" in full_year_results[0] else 0.0
+    total_emissions_electric_boiler = sum(r["emissions_electric_boiler_kg"] for r in full_year_results) if "emissions_electric_boiler_kg" in full_year_results[0] else 0.0
+    total_emissions_tess = sum(r["emissions_tess_kg"] for r in full_year_results) if "emissions_tess_kg" in full_year_results[0] else 0.0
 
-    write_hourly_results(output_file, hourly_results, result_fields)
-    plot_seasonal_energy_diagrams(hourly_results, components, config_name)
-    plot_soc_diagram(hourly_results, components, config_name)
+    annual_cost_pv_capex_total = total_cost_pv_capex
+    annual_cost_pv_om = total_cost_pv_om
+    annual_cost_grid = total_cost_grid
+    annual_revenue_grid = total_revenue_grid
+    annual_cost_gas_boiler = total_cost_gas_boiler
+    annual_cost_electric_boiler = total_cost_electric_boiler
+    annual_cost_heat_pump = total_cost_heat_pump
+    annual_cost_bess = total_cost_bess
+    annual_cost_tess = total_cost_tess
+    annual_cost_total = annual_cost_pv_capex_total + annual_cost_pv_om + annual_cost_grid - annual_revenue_grid + annual_cost_gas_boiler + annual_cost_electric_boiler + annual_cost_heat_pump + annual_cost_bess + annual_cost_tess
+
+    annual_emissions_grid = total_emissions_grid
+    annual_emissions_gas_boiler = total_emissions_gas_boiler
+    annual_emissions_electric_boiler = total_emissions_electric_boiler
+    annual_emissions_bess = 0.0
+    annual_emissions_tess = total_emissions_tess
+    annual_emissions_total = annual_emissions_grid + annual_emissions_gas_boiler + annual_emissions_electric_boiler + annual_emissions_bess + annual_emissions_tess
+
+    output_file = BASE_DIR / "Results" / "Tables" / f"hourly_results_{config_name}.csv"
+    annual_output_file = BASE_DIR / "Results" / "Tables" / f"annual_results_{config_name}.csv"
+    write_hourly_results(output_file, full_year_results, result_fields)
     write_annual_results(
         annual_output_file,
         {
-            "configuration":                     config_name,
-            "configuration_label":               CONFIG_LABELS.get(config_name, config_name),
-            "total_electricity_demand_kwh":       round(annual_electricity_demand, 4),
-            "total_electricity_consumption_kwh":  round(annual_electricity_consumption, 4),
-            "total_thermal_demand_kwh":            round(annual_thermal_demand, 4),
-            "total_pv_generation_kwh":             round(annual_pv_generation, 4),
-            "pv_self_consumption_fraction":        round(pv_self_consumption_fraction, 4),
-            "annual_cost_pv_capex_eur":            round(annual_cost_pv_capex_total, 4),
-            "annual_cost_pv_om_eur":               round(annual_cost_pv_om, 4),
-            "annual_cost_grid_eur":                round(annual_cost_grid, 4),
-            "annual_cost_gas_boiler_eur":          round(annual_cost_gas_boiler, 4),
-            "annual_cost_electric_boiler_eur":     round(annual_cost_electric_boiler, 4),
-            "annual_cost_heat_pump_eur":           round(annual_cost_heat_pump, 4),
-            "annual_cost_bess_eur":                round(annual_cost_bess, 4),
-            "annual_cost_tess_eur":                round(annual_cost_tess, 4),
-            "annual_revenue_grid_eur":             round(annual_revenue_grid, 4),
-            "annual_cost_total_eur":               round(annual_cost_total, 4),
-            "annual_emissions_grid_kg":            round(annual_emissions_grid, 4),
-            "annual_emissions_gas_boiler_kg":      round(annual_emissions_gas_boiler, 4),
+            "configuration": config_name,
+            "configuration_label": CONFIG_LABELS.get(config_name, config_name),
+            "total_electricity_demand_kwh": round(total_electricity_demand, 4),
+            "total_electricity_consumption_kwh": round(total_electricity_consumption, 4),
+            "total_thermal_demand_kwh": round(total_thermal_demand, 4),
+            "total_pv_generation_kwh": round(total_pv_generation, 4),
+            "pv_self_consumption_fraction": round(total_pv_used / total_pv_generation if total_pv_generation > 0 else 0.0, 4),
+            "annual_cost_pv_capex_eur": round(annual_cost_pv_capex_total, 4),
+            "annual_cost_pv_om_eur": round(annual_cost_pv_om, 4),
+            "annual_cost_grid_eur": round(annual_cost_grid, 4),
+            "annual_cost_gas_boiler_eur": round(annual_cost_gas_boiler, 4),
+            "annual_cost_electric_boiler_eur": round(annual_cost_electric_boiler, 4),
+            "annual_cost_heat_pump_eur": round(annual_cost_heat_pump, 4),
+            "annual_cost_bess_eur": round(annual_cost_bess, 4),
+            "annual_cost_tess_eur": round(annual_cost_tess, 4),
+            "annual_revenue_grid_eur": round(annual_revenue_grid, 4),
+            "annual_cost_total_eur": round(annual_cost_total, 4),
+            "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
+            "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
             "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
-            "annual_emissions_bess_kg":            round(annual_emissions_bess, 4),
-            "annual_emissions_tess_kg":            round(annual_emissions_tess, 4),
-            "annual_emissions_total_kg":           round(annual_emissions_total, 4),
+            "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
+            "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
+            "annual_emissions_total_kg": round(annual_emissions_total, 4),
         },
+        components,
     )
 
     print(f"  hourly results  -> {output_file}")
     print(f"  annual results  -> {annual_output_file}")
 
+    for label, month, day in EXAMPLE_DATES:
+        try:
+            electricity_start = get_example_start_index(electricity_series, month, day)
+            thermal_start = get_example_start_index(thermal_series, month, day)
+            solar_start = get_example_start_index(solar_series, month, day)
+            example_results = run_period_simulation(
+                components,
+                annualization_factor,
+                electricity_series,
+                thermal_series,
+                solar_series,
+                heat_pump_cop_series,
+                start_index_electricity=electricity_start,
+                start_index_thermal=thermal_start,
+                start_index_solar=solar_start,
+                length=24,
+                label=label,
+            )
+            write_hourly_results(BASE_DIR / "Results" / "Tables" / f"hourly_results_{config_name}_{label}.csv", example_results, result_fields)
+            plot_example_energy_diagrams(example_results, components, config_name, label)
+            plot_example_soc_diagram(example_results, components, config_name, label)
+            print(f"  example results  -> {BASE_DIR / 'Results' / 'Tables' / f'hourly_results_{config_name}_{label}.csv'}")
+        except ValueError as exc:
+            print(f"  warning: could not generate example output for {label}: {exc}")
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
-    all_solar_data = read_solar_data(SOLAR_DATA_FILE)
+    solar_file = resolve_data_file(SOLAR_DATA_CANDIDATES)
+
+    electricity_series = read_electricity_demand(ELECTRICITY_DATA_FILE)
+    thermal_series = read_thermal_demand(THERMAL_DATA_FILE)
+    solar_series = read_solar_data(solar_file)
+    heat_pump_cop_series = load_heat_pump_cop_series(THERMAL_DATA_FILE)
+
+    if len(electricity_series) == 0 or len(thermal_series) == 0 or len(solar_series) == 0:
+        raise ValueError("At least one input series is empty")
 
     remove_existing_output_files()
 
     for config_name in CONFIGURATIONS:
-        run_single_configuration(
-            config_name,
-            copy.deepcopy(base_component_config),
-            all_solar_data,
-        )
+        run_single_configuration(config_name, copy.deepcopy(base_component_config), electricity_series, thermal_series, solar_series, heat_pump_cop_series)
 
     print("\n--- Running cross-configuration comparison ---")
     run_comparison()

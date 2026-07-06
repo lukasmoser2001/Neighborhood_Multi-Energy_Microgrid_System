@@ -1,5 +1,4 @@
 from pathlib import Path
-import csv
 import json
 
 _BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -9,34 +8,6 @@ try:
         COMPONENT_PARAMETERS = json.load(_f)
 except Exception:
     COMPONENT_PARAMETERS = {}
-
-_HEAT_COP_FILES = [
-    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_01_2015.csv",
-    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_04_2015.csv",
-    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_07_2015.csv",
-    _BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_15_10_2015.csv",
-]
-
-def _parse_float(value: str) -> float:
-    if value is None or value == "":
-        return 0.0
-    return float(value.replace(",", "."))
-
-def _load_heat_cop_data(column_name: str) -> list[list[float]]:
-    data = []
-    for path in _HEAT_COP_FILES:
-        values = []
-        with path.open(newline="", encoding="utf-8") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                values.append(_parse_float(row.get(column_name, "0")))
-        data.append(values)
-    return data
-
-_HEAT_COP_ASHP_WATER_COLUMN = "FR_COP_ASHP_water"
-_HEAT_COP_SERIES = {
-    "air": _load_heat_cop_data(_HEAT_COP_ASHP_WATER_COLUMN),
-}
 
 
 def _get_heat_pump_cop(series: list[list[float]], season_index: int, hour_index: int) -> float:
@@ -130,20 +101,22 @@ class GasBoiler:
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("gas_boiler", {})
         self.enabled = cfg.get("enabled", False)
         if not self.enabled:
+            self.efficiency = 1.0
             self.lcoh_eur_per_kwh = 0.0
             self.emission_factor_kg_per_kwh = 0.0
             return
         try:
+            self.efficiency = cfg["efficiency"]
             self.lcoh_eur_per_kwh = cfg["lcoh_eur_per_kwh"]
             self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for GasBoiler in component_parameters.json")
 
     def get_cost_eur(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.lcoh_eur_per_kwh
+        return (thermal_kwh / self.efficiency) * self.lcoh_eur_per_kwh if self.enabled else 0.0
 
     def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.emission_factor_kg_per_kwh
+        return (thermal_kwh / self.efficiency) * self.emission_factor_kg_per_kwh if self.enabled else 0.0
 
 
 class ElectricBoiler:
@@ -173,7 +146,7 @@ class ElectricBoiler:
 
 
 class HeatPumpAir:
-    def __init__(self, config: dict | None = None):
+    def __init__(self, config: dict | None = None, cop_series: list[list[float]] | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("heat_pump_air", {})
         self.enabled = cfg.get("enabled", False)
         if not self.enabled:
@@ -186,7 +159,7 @@ class HeatPumpAir:
             self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for HeatPumpAir in component_parameters.json")
-        self.cop_series = _HEAT_COP_SERIES["air"]
+        self.cop_series = cop_series if cop_series is not None else []
 
     def get_cop(self, season_index: int, hour_index: int) -> float:
         return _get_heat_pump_cop(self.cop_series, season_index, hour_index)

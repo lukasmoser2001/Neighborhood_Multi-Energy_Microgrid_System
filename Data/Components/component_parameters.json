@@ -16,11 +16,12 @@
     "beta_per_c": 0.0024,
     "panel_area_m2": 2.08,
     "panels_per_household": 10,
-    "power_density_w_m2": 224,
+    "power_density_w_m2": 226,
     "annualized_capital_cost_per_panel_eur": 15.74,
     "o_and_m_cost_per_kwh_eur": 0.01
   },
   "gas_boiler": {
+    "efficiency": 0.986,
     "lcoh_eur_per_kwh": 0.13,
     "emission_factor_kg_per_kwh": 0.02
   },

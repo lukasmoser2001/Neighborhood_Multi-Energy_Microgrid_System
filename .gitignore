@@ -25,4 +25,3 @@ wheels/
 
 # Data files to ignore (generated summaries)
 Data/Load/Heat/when2heat.csv
-Data/Load/Electricity/gas_house-summary.csv

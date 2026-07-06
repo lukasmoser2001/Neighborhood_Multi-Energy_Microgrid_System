@@ -10,12 +10,36 @@ os.chdir(script_dir)
 df = pd.read_csv('when2heat.csv', sep=';', on_bad_lines='skip')
 df['utc_timestamp'] = pd.to_datetime(df['utc_timestamp'])
 
+
+def format_output_table(table: pd.DataFrame) -> pd.DataFrame:
+    formatted_table = table.copy()
+
+    formatted_table['FR_heat_demand_space_SFH'] = pd.to_numeric(
+        formatted_table['FR_heat_demand_space_SFH'], errors='coerce') / 10
+    formatted_table['FR_heat_demand_water'] = pd.to_numeric(
+        formatted_table['FR_heat_demand_water'], errors='coerce') / 10
+
+    if 'FR_COP_ASHP_water' in formatted_table.columns:
+        formatted_table['FR_COP_ASHP_water'] = formatted_table['FR_COP_ASHP_water'].apply(
+            lambda value: str(value).replace('.', ',') if pd.notna(value) else ''
+        )
+
+    return formatted_table
+
+
 required_columns = [
     'utc_timestamp',
     'FR_heat_demand_space_SFH',
     'FR_heat_demand_water',
     'FR_COP_ASHP_water',
     'FR_COP_GSHP_floor'
+]
+
+year_columns = [
+    'utc_timestamp',
+    'FR_heat_demand_space_SFH',
+    'FR_heat_demand_water',
+    'FR_COP_ASHP_water'
 ]
 
 target_dates = [
@@ -27,13 +51,7 @@ target_dates = [
 
 for target_date in target_dates:
     df_filtered = df[df['utc_timestamp'].dt.date == target_date.date()]
-    result_table = df_filtered[required_columns].copy()
-
-    # Divide thermal demand values by 10 to correct the reported input values.
-    result_table['FR_heat_demand_space_SFH'] = pd.to_numeric(
-        result_table['FR_heat_demand_space_SFH'], errors='coerce') / 10
-    result_table['FR_heat_demand_water'] = pd.to_numeric(
-        result_table['FR_heat_demand_water'], errors='coerce') / 10
+    result_table = format_output_table(df_filtered[required_columns].copy())
 
     output_filename = f'extracted_when2heat_FR_{target_date.strftime("%d_%m_%Y")}.csv'
     result_table.to_csv(output_filename, index=False)
@@ -64,3 +82,11 @@ for target_date in target_dates:
     figure_filename = f'heat_demand_graph_FR_{target_date.strftime("%d_%m_%Y")}.pdf'
     plt.savefig(figure_filename, bbox_inches='tight')
     plt.close()
+
+# Extract the full year 2015 using the same formatting style.
+year = 2015
+year_filtered = df[df['utc_timestamp'].dt.year == year]
+year_result_table = format_output_table(year_filtered[year_columns].copy())
+
+year_output_filename = f'extracted_when2heat_FR_{year}.csv'
+year_result_table.to_csv(year_output_filename, index=False)
