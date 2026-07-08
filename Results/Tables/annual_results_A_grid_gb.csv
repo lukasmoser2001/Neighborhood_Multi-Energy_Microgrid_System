@@ -1,2 +1,2 @@
 configuration,configuration_label,total_electricity_demand_kwh,total_electricity_consumption_kwh,total_thermal_demand_kwh,annual_cost_grid_eur,annual_cost_total_eur,annual_emissions_grid_kg,annual_emissions_total_kg,annual_cost_gas_boiler_eur,annual_emissions_gas_boiler_kg
-A_grid_gb,A: Grid + Gas Boiler,6215.4899,6215.4899,19069.9188,1114.4385,3628.7277,124.3064,511.12,2514.2892,386.8136
+A_grid_gb,A: Grid + Gas Boiler,6528.3965,6528.3965,20222.3324,1170.5414,3836.7697,130.5665,540.7587,2666.2283,410.1922

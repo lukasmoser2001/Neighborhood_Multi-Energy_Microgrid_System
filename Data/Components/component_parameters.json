@@ -2,6 +2,14 @@
   "annualization": {
     "factor": 91.25
   },
+  "neighborhood_upscaling": {
+    "n_households": 1,
+    "sigma_log_electricity": 0.20,
+    "sigma_log_thermal": 0.30,
+    "coincidence_alpha": 0.15,
+    "seed_offset_electricity": 0,
+    "seed_offset_thermal": 1000
+  },
   "utility_grid": {
     "electricity_price_eur_per_kwh": 0.1793,
     "sell_price_eur_per_kwh": 0.08345,
@@ -27,7 +35,7 @@
   },
   "electric_boiler": {
     "efficiency": 0.99,
-    "lcoh_eur_per_kwh": 0.15,
+    "lcoh_eur_per_kwh": 0.37,
     "emission_factor_kg_per_kwh": 0.0
   },
   "heat_pump_air": {
@@ -44,7 +52,7 @@
     "E_BES_cap": 3.28,
     "P_BES_max": 3456,
     "LCOS": 0.456,
-    "LEOS": 83.5,
+    "LEOS": 0.011,
     "CO2eq_BES": 273.88,
     "lifetime_BES": 10,
     "CO2eq_BES_annual": 27.388

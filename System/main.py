@@ -1,6 +1,4 @@
-﻿from __future__ import annotations
-
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from pathlib import Path
 import copy
 import csv
@@ -27,11 +25,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 COMPONENT_PARAMETERS_FILE = BASE_DIR / "Data" / "Components" / "component_parameters.json"
 ELECTRICITY_DATA_FILE = BASE_DIR / "Data" / "Load" / "Electricity" / "gas_house-summary.csv"
 THERMAL_DATA_FILE = BASE_DIR / "Data" / "Load" / "Heat" / "extracted_when2heat_FR_2015.csv"
-SOLAR_DATA_CANDIDATES = [
-    BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv",
-    BASE_DIR / "Data" / "OtherFactors" / "SolarIrradiation" / "IT_Tamb_Compiegne_2023.csv",
-    BASE_DIR / "Data" / "Load" / "OtherFactors" / "SolarIrradiation" / "IT_Tamb_Compiegne_2023.csv",
-]
+SOLAR_DATA_FILE = BASE_DIR / "Data" / "SolarIrradiation" / "It_Tamb_Compiegne_2023.csv"
 ELECTRICITY_COLUMN_NAME = "Mean"
 THERMAL_SPACE_COLUMN = "FR_heat_demand_space_SFH"
 THERMAL_WATER_COLUMN = "FR_heat_demand_water"
@@ -48,10 +42,10 @@ CONFIG_LABELS = {
 }
 
 EXAMPLE_DATES = [
-    ("15_01", 1, 15),
-    ("15_04", 4, 15),
-    ("15_07", 7, 15),
-    ("15_10", 10, 15),
+    ("winter", 1, 15),
+    ("spring", 4, 15),
+    ("summer", 7, 15),
+    ("autumn", 10, 15),
 ]
 
 
@@ -77,13 +71,6 @@ def parse_timestamp(value: str) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
-
-
-def resolve_data_file(paths: list[Path]) -> Path:
-    for path in paths:
-        if path.exists():
-            return path
-    raise FileNotFoundError(f"None of the solar data files were found: {paths}")
 
 
 def read_electricity_demand(path: Path) -> list[tuple[datetime, float]]:
@@ -161,6 +148,23 @@ def load_component_parameters(path: Path) -> dict:
         raise FileNotFoundError(f"Component parameters file not found: {path}")
     with path.open("r", encoding="utf-8") as jsonfile:
         return json.load(jsonfile)
+
+
+def upscale_demand_series(
+    base_series: list[tuple[datetime, float]],
+    n_households: int,
+    sigma_log: float,
+    coincidence_alpha: float,
+    seed: int,
+) -> list[tuple[datetime, float]]:
+    rng = np.random.default_rng(seed=seed)
+    mu_log = -0.5 * sigma_log ** 2
+    scaling_factors = rng.lognormal(mean=mu_log, sigma=sigma_log, size=n_households)
+    cf = float(np.clip(
+        (1.0 / np.sqrt(n_households)) * (1.0 - coincidence_alpha) + coincidence_alpha,
+        0.0, 1.0
+    ))
+    return [(ts, float(np.sum(base_val * scaling_factors) * cf)) for ts, base_val in base_series]
 
 
 def apply_component_parameters(config: dict, heat_pump_cop_series: list[list[float]] | None = None) -> dict:
@@ -316,7 +320,7 @@ def remove_existing_output_files() -> None:
     figures_dir.mkdir(parents=True, exist_ok=True)
     tables_dir.mkdir(parents=True, exist_ok=True)
 
-    for pattern in ("*.png", "*.pdf"):
+    for pattern in ("*.pdf",):
         for fig_file in figures_dir.glob(pattern):
             try:
                 os.remove(fig_file)
@@ -453,9 +457,9 @@ def plot_example_energy_diagrams(hourly_results: list[dict], components: dict, c
     ax.set_xlabel("Hour of day [h]")
     ax.set_ylabel("Thermal energy [kWh]")
     ax.set_xlim(-0.5, 23.5)
-    ax.set_ylim(-(THERMAL_Y_MAX * 0.5), THERMAL_Y_MAX)
+    ax.set_ylim(-4.0, 12.5)
     ax.set_xticks(range(0, 24))
-    ax.set_yticks(np.arange(-(THERMAL_Y_MAX * 0.5), THERMAL_Y_MAX + 0.1, 2.0))
+    ax.set_yticks(np.arange(-4.0, 12.6, 2.0))
     ax.axhline(0, color="black", linewidth=0.8, linestyle="-")
     ax.grid(True, linestyle="--", alpha=0.4)
     ax.legend(loc="upper left", fontsize=10)
@@ -597,7 +601,6 @@ def run_period_simulation(
     electricity_series: list[tuple[datetime, float]],
     thermal_series: list[tuple[datetime, float]],
     solar_series: list[tuple[datetime, float, float]],
-    heat_pump_cop_series: list[list[float]],
     start_index_electricity: int,
     start_index_thermal: int,
     start_index_solar: int,
@@ -697,7 +700,8 @@ def run_period_simulation(
             tess_soc_kwh = 0.0
             tess_soc_pct = 0.0
 
-        total_electricity_consumption_kwh = electricity_kwh + electric_boiler_electric_demand_kwh + heat_pump_electric_demand_kwh
+        heat_source_electricity_demand_kwh = electric_boiler_electric_demand_kwh + heat_pump_electric_demand_kwh
+        total_electricity_consumption_kwh = electricity_kwh + heat_source_electricity_demand_kwh
         bess_charge_kwh = 0.0
         bess_discharge_kwh = 0.0
         if bess:
@@ -720,12 +724,13 @@ def run_period_simulation(
 
             bess.clamp_soc()
             grid_supply_kwh = max(0.0, total_electricity_consumption_kwh - pv_output_kwh - bess_discharge_kwh)
+            grid_cost_supply_kwh = max(0.0, electricity_kwh - pv_output_kwh - bess_discharge_kwh)
             grid_export_kwh = max(0.0, pv_output_kwh - total_electricity_consumption_kwh - bess_charge_kwh)
         else:
             grid_supply_kwh = max(0.0, total_electricity_consumption_kwh - pv_output_kwh)
+            grid_cost_supply_kwh = max(0.0, electricity_kwh - pv_output_kwh)
             grid_export_kwh = max(0.0, pv_output_kwh - total_electricity_consumption_kwh)
 
-        pv_used_kwh = pv_output_kwh - grid_export_kwh
         bess_soc_kwh = bess.soc if bess else 0.0
         bess_soc_pct = bess.soc_pct if bess else 0.0
 
@@ -767,7 +772,7 @@ def run_period_simulation(
         cost_grid_eur = 0.0
         grid_revenue_eur = 0.0
         if grid:
-            cost_grid_eur = grid.get_cost_eur(grid_supply_kwh)
+            cost_grid_eur = grid.get_cost_eur(grid_cost_supply_kwh)
             grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
 
         cost_gas_boiler_eur = 0.0
@@ -798,7 +803,7 @@ def run_period_simulation(
         emissions_gas_boiler_kg = gas_boiler.get_emissions_kg(gas_boiler_heat_kwh) if gas_boiler else 0.0
         emissions_electric_boiler_kg = electric_boiler.get_emissions_kg(electric_boiler_heat_kwh) if electric_boiler else 0.0
         emissions_heat_pump_kg = 0.0
-        emissions_bess_kg = 0.0
+        emissions_bess_kg = bess.get_emissions_kg(bess_discharge_kwh) if bess else 0.0
         emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh) if tess else 0.0
         total_emissions_hour_kg = emissions_grid_kg + emissions_gas_boiler_kg + emissions_electric_boiler_kg + emissions_heat_pump_kg + emissions_bess_kg + emissions_tess_kg
 
@@ -871,7 +876,6 @@ def run_single_configuration(
         electricity_series,
         thermal_series,
         solar_series,
-        heat_pump_cop_series,
         start_index_electricity=0,
         start_index_thermal=0,
         start_index_solar=0,
@@ -897,6 +901,7 @@ def run_single_configuration(
     total_emissions_gas_boiler = sum(r["emissions_gas_boiler_kg"] for r in full_year_results) if "emissions_gas_boiler_kg" in full_year_results[0] else 0.0
     total_emissions_electric_boiler = sum(r["emissions_electric_boiler_kg"] for r in full_year_results) if "emissions_electric_boiler_kg" in full_year_results[0] else 0.0
     total_emissions_tess = sum(r["emissions_tess_kg"] for r in full_year_results) if "emissions_tess_kg" in full_year_results[0] else 0.0
+    total_emissions_bess = sum(r["emissions_bess_kg"] for r in full_year_results) if "emissions_bess_kg" in full_year_results[0] else 0.0
 
     annual_cost_pv_capex_total = total_cost_pv_capex
     annual_cost_pv_om = total_cost_pv_om
@@ -912,7 +917,7 @@ def run_single_configuration(
     annual_emissions_grid = total_emissions_grid
     annual_emissions_gas_boiler = total_emissions_gas_boiler
     annual_emissions_electric_boiler = total_emissions_electric_boiler
-    annual_emissions_bess = 0.0
+    annual_emissions_bess = total_emissions_bess
     annual_emissions_tess = total_emissions_tess
     annual_emissions_total = annual_emissions_grid + annual_emissions_gas_boiler + annual_emissions_electric_boiler + annual_emissions_bess + annual_emissions_tess
 
@@ -963,7 +968,6 @@ def run_single_configuration(
                 electricity_series,
                 thermal_series,
                 solar_series,
-                heat_pump_cop_series,
                 start_index_electricity=electricity_start,
                 start_index_thermal=thermal_start,
                 start_index_solar=solar_start,
@@ -980,12 +984,35 @@ def run_single_configuration(
 
 def main() -> None:
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
-    solar_file = resolve_data_file(SOLAR_DATA_CANDIDATES)
+    ups = base_component_config["neighborhood_upscaling"]
+    N_HOUSEHOLDS      = int(ups["n_households"])
+    SIGMA_LOG_ELEC    = float(ups["sigma_log_electricity"])
+    SIGMA_LOG_THERM   = float(ups["sigma_log_thermal"])
+    COINCIDENCE_ALPHA = float(ups["coincidence_alpha"])
+    SEED_OFFSET_ELEC  = int(ups["seed_offset_electricity"])
+    SEED_OFFSET_THERM = int(ups["seed_offset_thermal"])
+    if not SOLAR_DATA_FILE.exists():
+        raise FileNotFoundError(f"Solar data file not found: {SOLAR_DATA_FILE}")
 
     electricity_series = read_electricity_demand(ELECTRICITY_DATA_FILE)
     thermal_series = read_thermal_demand(THERMAL_DATA_FILE)
-    solar_series = read_solar_data(solar_file)
+    solar_series = read_solar_data(SOLAR_DATA_FILE)
     heat_pump_cop_series = load_heat_pump_cop_series(THERMAL_DATA_FILE)
+
+    electricity_series = upscale_demand_series(
+        electricity_series,
+        n_households=N_HOUSEHOLDS,
+        sigma_log=SIGMA_LOG_ELEC,
+        coincidence_alpha=COINCIDENCE_ALPHA,
+        seed=N_HOUSEHOLDS + SEED_OFFSET_ELEC,
+    )
+    thermal_series = upscale_demand_series(
+        thermal_series,
+        n_households=N_HOUSEHOLDS,
+        sigma_log=SIGMA_LOG_THERM,
+        coincidence_alpha=COINCIDENCE_ALPHA,
+        seed=N_HOUSEHOLDS + SEED_OFFSET_THERM,
+    )
 
     if len(electricity_series) == 0 or len(thermal_series) == 0 or len(solar_series) == 0:
         raise ValueError("At least one input series is empty")

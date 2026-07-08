@@ -9,6 +9,8 @@ try:
 except Exception:
     COMPONENT_PARAMETERS = {}
 
+_N = int((COMPONENT_PARAMETERS.get("neighborhood_upscaling") or {}).get("n_households", 1))
+
 
 def _get_heat_pump_cop(series: list[list[float]], season_index: int, hour_index: int) -> float:
     if season_index < 0 or season_index >= len(series):
@@ -72,7 +74,7 @@ class PVSystem:
             self.t_nom = cfg["t_nom_c"]
             self.beta = cfg["beta_per_c"]
             self.panel_area_m2 = cfg["panel_area_m2"]
-            self.panels_per_household = cfg["panels_per_household"]
+            self.panels_per_household = int(cfg["panels_per_household"]) * _N
             self.power_density_w_m2 = cfg["power_density_w_m2"]
             self.capex_per_panel_eur = cfg["annualized_capital_cost_per_panel_eur"]
             self.om_cost_per_kwh = cfg["o_and_m_cost_per_kwh_eur"]
@@ -176,8 +178,6 @@ class HeatPumpAir:
 
 
 class BatteryStorage:
-    # JSON keys used: E_BES_cap, eta_BES_char, eta_BES_disc, P_BES_max, LCOS,
-    #                 sigma_BES, SOC_BES_init, CO2eq_BES_annual
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("BESS", {})
         self.enabled = cfg.get("enabled", False)
@@ -193,14 +193,15 @@ class BatteryStorage:
             self.CO2eq_BES_annual = 0.0
             return
         try:
-            self.E_cap = cfg["E_BES_cap"]
+            self.E_cap = float(cfg["E_BES_cap"]) * _N
             self.soc_init_frac = cfg.get("SOC_BES_init", 0.5)
             self.eta_char = cfg["eta_BES_char"]
             self.eta_disc = cfg["eta_BES_disc"]
             self.sigma = cfg.get("sigma_BES", 0.0)
-            self.P_max = cfg["P_BES_max"]
+            self.P_max = float(cfg["P_BES_max"]) * _N
             self.LCOS = cfg["LCOS"]
             self.CO2eq_BES_annual = cfg.get("CO2eq_BES_annual", 0.0)
+            self.LEOS = cfg.get("LEOS", 0.0)
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for BatteryStorage in component_parameters.json")
         self.soc = self.E_cap * self.soc_init_frac
@@ -239,13 +240,14 @@ class BatteryStorage:
     def get_discharge_energy_output(self, discharge_kwh: float) -> float:
         return discharge_kwh * self.eta_disc
 
-    def get_cost_eur(self, charge_kwh: float) -> float:
-        return charge_kwh * self.LCOS if self.enabled else 0.0
+    def get_cost_eur(self, discharge_kwh: float) -> float:
+        return discharge_kwh * self.LCOS if self.enabled else 0.0
+
+    def get_emissions_kg(self, discharge_kwh: float) -> float:
+        return discharge_kwh * self.LEOS if self.enabled else 0.0
 
 
 class ThermalEnergyStorage:
-    # JSON keys used: E_TESS_cap, sigma_TESS, eta_PHE (charge+discharge efficiency),
-    #                 SOC_TESS_12am, LCOH_TESS, LEOH_TESS
     def __init__(self, config: dict | None = None):
         cfg = config if config is not None else COMPONENT_PARAMETERS.get("TESS", {})
         self.enabled = cfg.get("enabled", False)
@@ -260,7 +262,7 @@ class ThermalEnergyStorage:
             self.emission_factor_kg_per_kwh = 0.0
             return
         try:
-            self.E_cap = cfg["E_TESS_cap"]
+            self.E_cap = float(cfg["E_TESS_cap"]) * _N
             self.soc_init_frac = cfg.get("SOC_TESS_12am", 0.5)
             self.eta_char = cfg.get("eta_PHE", 1.0)
             self.eta_disc = cfg.get("eta_PHE", 1.0)
@@ -306,8 +308,8 @@ class ThermalEnergyStorage:
         self.soc = max(0.0, min(self.soc, self.E_cap))
         self.soc *= (1.0 - self.sigma)
 
-    def get_cost_eur(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.lcoh if self.enabled else 0.0
+    def get_cost_eur(self, discharge_kwh: float) -> float:
+        return discharge_kwh * self.lcoh if self.enabled else 0.0
 
-    def get_emissions_kg(self, thermal_kwh: float) -> float:
-        return thermal_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
+    def get_emissions_kg(self, discharge_kwh: float) -> float:
+        return discharge_kwh * self.emission_factor_kg_per_kwh if self.enabled else 0.0
