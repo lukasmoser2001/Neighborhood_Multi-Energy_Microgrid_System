@@ -29,16 +29,21 @@ class UtilityGrid:
             self.electricity_price_eur_per_kwh = 0.0
             self.sell_price_eur_per_kwh = 0.0
             self.emission_factor_kg_per_kwh = 0.0
+            self.yearly_subscription_eur_per_year = 0.0
             return
         try:
             self.electricity_price_eur_per_kwh = cfg["electricity_price_eur_per_kwh"]
             self.sell_price_eur_per_kwh = cfg["sell_price_eur_per_kwh"]
             self.emission_factor_kg_per_kwh = cfg["emission_factor_kg_per_kwh"]
+            self.yearly_subscription_eur_per_year = cfg["yearly_subscription_eur_per_year"] * _N
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for UtilityGrid in component_parameters.json")
 
     def get_cost_eur(self, electricity_kwh: float) -> float:
         return electricity_kwh * self.electricity_price_eur_per_kwh
+
+    def get_subscription_cost_hour_eur(self, annualization_factor: float) -> float:
+        return self.yearly_subscription_eur_per_year / annualization_factor
 
     def get_revenue_eur(self, export_kwh: float) -> float:
         return export_kwh * self.sell_price_eur_per_kwh
@@ -92,7 +97,7 @@ class PVSystem:
         return max(0.0, p_pv_w) / 1000.0
 
     def get_capex_hour_eur(self, annualization_factor: float) -> float:
-        return self.capex_total_eur / (annualization_factor * 24.0)
+        return self.capex_total_eur / annualization_factor
 
     def get_om_cost_eur(self, pv_output_kwh: float) -> float:
         return pv_output_kwh * self.om_cost_per_kwh

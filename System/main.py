@@ -206,6 +206,7 @@ def build_result_fields(components: dict) -> list[str]:
 
     fields += [
         "cost_grid_eur",
+        "cost_grid_subscription_eur",
         "total_cost_hour_eur",
         "emissions_grid_kg",
         "total_emissions_hour_kg",
@@ -770,9 +771,11 @@ def run_period_simulation(
             cost_pv_om_eur = pv.get_om_cost_eur(pv_output_kwh)
 
         cost_grid_eur = 0.0
+        cost_grid_subscription_eur = 0.0
         grid_revenue_eur = 0.0
         if grid:
             cost_grid_eur = grid.get_cost_eur(grid_cost_supply_kwh)
+            cost_grid_subscription_eur = grid.get_subscription_cost_hour_eur(annualization_factor)
             grid_revenue_eur = grid.get_revenue_eur(grid_export_kwh)
 
         cost_gas_boiler_eur = 0.0
@@ -796,7 +799,7 @@ def run_period_simulation(
             cost_tess_eur = tess.get_cost_eur(tess_discharge_kwh)
 
         total_cost_hour_eur = (
-            cost_pv_capex_hour_eur + cost_pv_om_eur + cost_grid_eur - grid_revenue_eur + cost_gas_boiler_eur + cost_electric_boiler_eur + cost_heat_pump_eur + cost_bess_eur + cost_tess_eur
+            cost_pv_capex_hour_eur + cost_pv_om_eur + cost_grid_eur + cost_grid_subscription_eur - grid_revenue_eur + cost_gas_boiler_eur + cost_electric_boiler_eur + cost_heat_pump_eur + cost_bess_eur + cost_tess_eur
         )
 
         emissions_grid_kg = grid.get_emissions_kg(grid_supply_kwh) if grid else 0.0
@@ -836,6 +839,7 @@ def run_period_simulation(
                 "cost_pv_capex_hour_eur": round(cost_pv_capex_hour_eur, 4),
                 "cost_pv_om_eur": round(cost_pv_om_eur, 4),
                 "cost_grid_eur": round(cost_grid_eur, 4),
+                "cost_grid_subscription_eur": round(cost_grid_subscription_eur, 4),
                 "cost_gas_boiler_eur": round(cost_gas_boiler_eur, 4),
                 "cost_electric_boiler_eur": round(cost_electric_boiler_eur, 4),
                 "cost_heat_pump_eur": round(cost_heat_pump_eur, 4),
