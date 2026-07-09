@@ -26,6 +26,9 @@ from Components import (
 from data_loading import (
     BASE_DIR,
     COMPONENT_PARAMETERS_FILE,
+    ELECTRICITY_DATA_FILE,
+    THERMAL_DATA_FILE,
+    SOLAR_DATA_FILE,
     read_electricity_demand,
     read_thermal_demand,
     read_solar_data,
