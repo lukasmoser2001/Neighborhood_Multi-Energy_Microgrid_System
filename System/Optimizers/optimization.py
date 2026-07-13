@@ -8,21 +8,13 @@ from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 
+
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from Configurations.configurations import apply_configuration
-from Components import (
-    UtilityGrid,
-    PVSystem,
-    GasBoiler,
-    ElectricBoiler,
-    HeatPumpAir,
-    BatteryStorage,
-    ThermalEnergyStorage,
-)
 from data_loading import (
     BASE_DIR,
     COMPONENT_PARAMETERS_FILE,
@@ -36,6 +28,7 @@ from data_loading import (
     load_component_parameters,
     upscale_demand_series,
 )
+from simulation import evaluate_configuration_full_year
 
 
 class NeighborhoodCostProblem(Problem):
@@ -69,42 +62,6 @@ class NeighborhoodCostProblem(Problem):
             )
             F.append([cost])
         out["F"] = np.array(F)
-
-
-def build_components_for_config(
-    config_id: str,
-    n_pv_hh: float,
-    e_bess_cap: float,
-    e_tess_cap: float,
-    heat_pump_cop_series,
-):
-    base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
-    component_config = apply_configuration(base_component_config, config_id)
-    if "pv_system" in component_config:
-        component_config["pv_system"]["panels_per_household"] = float(n_pv_hh)
-    if "BESS" in component_config:
-        component_config["BESS"]["E_BES_cap"] = float(e_bess_cap)
-    if "TESS" in component_config:
-        component_config["TESS"]["E_TESS_cap"] = float(e_tess_cap)
-    components: dict[str, object] = {}
-    if component_config["utility_grid"].get("enabled", True):
-        components["grid"] = UtilityGrid(component_config["utility_grid"])
-    if component_config["pv_system"].get("enabled", False):
-        components["pv"] = PVSystem(component_config["pv_system"])
-    if component_config["gas_boiler"].get("enabled", False):
-        components["gas_boiler"] = GasBoiler(component_config["gas_boiler"])
-    if component_config["electric_boiler"].get("enabled", False):
-        components["electric_boiler"] = ElectricBoiler(component_config["electric_boiler"])
-    if component_config["heat_pump_air"].get("enabled", False):
-        components["heat_pump_air"] = HeatPumpAir(
-            component_config["heat_pump_air"],
-            cop_series=heat_pump_cop_series,
-        )
-    if component_config.get("BESS", {}).get("enabled", False):
-        components["bess"] = BatteryStorage(component_config.get("BESS", {}))
-    if component_config.get("TESS", {}).get("enabled", False):
-        components["tess"] = ThermalEnergyStorage(component_config.get("TESS", {}))
-    return components, component_config
 
 
 def load_all_timeseries():
@@ -143,59 +100,24 @@ def run_annual_cost(
     e_bess_cap: float,
     e_tess_cap: float,
 ) -> float:
-    from simulation import run_period_simulation
+    base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
+    component_config = apply_configuration(base_component_config, config_id)
+    if "pv_system" in component_config:
+        component_config["pv_system"]["panels_per_household"] = float(n_pv_hh)
+    if "BESS" in component_config:
+        component_config["BESS"]["E_BES_cap"] = float(e_bess_cap)
+    if "TESS" in component_config:
+        component_config["TESS"]["E_TESS_cap"] = float(e_tess_cap)
 
     electricity_series, thermal_series, solar_series, heat_pump_cop_series = load_all_timeseries()
-    components, component_config = build_components_for_config(
-        config_id=config_id,
-        n_pv_hh=n_pv_hh,
-        e_bess_cap=e_bess_cap,
-        e_tess_cap=e_tess_cap,
-        heat_pump_cop_series=heat_pump_cop_series,
-    )
-    annualization_factor = component_config["annualization"]["factor"]
-    full_year_results = run_period_simulation(
-        components,
-        annualization_factor,
+    result = evaluate_configuration_full_year(
+        component_config,
         electricity_series,
         thermal_series,
         solar_series,
-        start_index_electricity=0,
-        start_index_thermal=0,
-        start_index_solar=0,
-        length=len(electricity_series),
-        label=None,
+        heat_pump_cop_series,
     )
-    total_cost_pv_om = sum(r.get("cost_pv_om_eur", 0.0) for r in full_year_results)
-    total_cost_pv_capex = sum(r.get("cost_pv_capex_hour_eur", 0.0) for r in full_year_results)
-    total_cost_grid = sum(r.get("cost_grid_eur", 0.0) for r in full_year_results)
-    total_revenue_grid = sum(r.get("grid_revenue_eur", 0.0) for r in full_year_results)
-    total_cost_gas_boiler = sum(r.get("cost_gas_boiler_eur", 0.0) for r in full_year_results)
-    total_cost_electric_boiler = sum(r.get("cost_electric_boiler_eur", 0.0) for r in full_year_results)
-    total_cost_heat_pump = sum(r.get("cost_heat_pump_eur", 0.0) for r in full_year_results)
-    total_cost_bess = sum(r.get("cost_bess_eur", 0.0) for r in full_year_results)
-    total_cost_tess = sum(r.get("cost_tess_eur", 0.0) for r in full_year_results)
-    annual_cost_pv_capex_total = total_cost_pv_capex
-    annual_cost_pv_om = total_cost_pv_om
-    annual_cost_grid = total_cost_grid
-    annual_revenue_grid = total_revenue_grid
-    annual_cost_gas_boiler = total_cost_gas_boiler
-    annual_cost_electric_boiler = total_cost_electric_boiler
-    annual_cost_heat_pump = total_cost_heat_pump
-    annual_cost_bess = total_cost_bess
-    annual_cost_tess = total_cost_tess
-    annual_cost_total = (
-        annual_cost_pv_capex_total
-        + annual_cost_pv_om
-        + annual_cost_grid
-        - annual_revenue_grid
-        + annual_cost_gas_boiler
-        + annual_cost_electric_boiler
-        + annual_cost_heat_pump
-        + annual_cost_bess
-        + annual_cost_tess
-    )
-    return float(annual_cost_total)
+    return float(result["annual_cost_total_eur"])
 
 
 def run_nsga2_for_config(config_id: str) -> dict:
@@ -204,7 +126,7 @@ def run_nsga2_for_config(config_id: str) -> dict:
         pop_size=20,
         eliminate_duplicates=True,
     )
-    termination = get_termination("n_gen", 30)
+    termination = get_termination("n_gen", 20)
     res = minimize(
         problem=problem,
         algorithm=algorithm,
@@ -213,17 +135,22 @@ def run_nsga2_for_config(config_id: str) -> dict:
         save_history=False,
         verbose=True,
     )
-    F = res.F.flatten()
-    X = res.X
-    best_idx = F.argmin()
-    best_x = X[best_idx]
-    best_f = F[best_idx]
+    X = np.asarray(res.X)
+    F = np.asarray(res.F).flatten()
+
+    if X.ndim == 1:
+        best_x = X
+        best_f = F[0] if F.size == 1 else F[F.argmin()]
+    else:
+        best_idx = F.argmin()
+        best_x = X[best_idx]
+        best_f = F[best_idx]
     return {
         "config_id": config_id,
-        "N_PV_hh": best_x[0],
-        "E_BESS_cap_kwh": best_x[1],
-        "E_TESS_cap_kwh": best_x[2],
-        "annual_cost_total_eur": best_f,
+        "N_PV_hh": float(best_x[0]),
+        "E_BESS_cap_kwh": float(best_x[1]),
+        "E_TESS_cap_kwh": float(best_x[2]),
+        "annual_cost_total_eur": float(best_f),
     }
 
 
@@ -232,7 +159,7 @@ def main_opt() -> None:
     for cfg in ["C_grid_eb_pv_bess", "D_grid_ashp_pv_bess_tess"]:
         records.append(run_nsga2_for_config(cfg))
     df = pd.DataFrame(records)
-    out_path = BASE_DIR / "Results" / "Tables" / "nsga2_best_designs_CD.csv"
+    out_path = BASE_DIR / "Results" / "Tables" / "nsga2_best_designs_CD_2.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
     print(f"NSGA-II best designs for C and D written to {out_path}")

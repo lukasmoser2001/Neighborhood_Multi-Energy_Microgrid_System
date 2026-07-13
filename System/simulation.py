@@ -182,7 +182,7 @@ def build_annual_result_fields(components: dict) -> list[str]:
     if "electric_boiler" in components:
         fields += ["annual_cost_electric_boiler_eur", "annual_emissions_electric_boiler_kg"]
     if "heat_pump_air" in components:
-        fields += ["annual_cost_heat_pump_eur"]
+        fields += ["annual_cost_heat_pump_eur", "annual_emissions_heat_pump_kg"]
     if "bess" in components:
         fields += ["annual_cost_bess_eur", "annual_emissions_bess_kg"]
     if "tess" in components:
@@ -492,7 +492,7 @@ def run_period_simulation(
     start_index_solar: int,
     length: int,
     label: str | None = None,
-) -> list[dict]:
+ ) -> list[dict]:
     grid = components.get("grid")
     pv = components.get("pv")
     gas_boiler = components.get("gas_boiler")
@@ -690,7 +690,7 @@ def run_period_simulation(
         emissions_grid_kg = grid.get_emissions_kg(grid_supply_kwh) if grid else 0.0
         emissions_gas_boiler_kg = gas_boiler.get_emissions_kg(gas_boiler_heat_kwh) if gas_boiler else 0.0
         emissions_electric_boiler_kg = electric_boiler.get_emissions_kg(electric_boiler_heat_kwh) if electric_boiler else 0.0
-        emissions_heat_pump_kg = 0.0
+        emissions_heat_pump_kg = heat_pump_air.get_emissions_kg(heat_pump_heat_kwh) if heat_pump_air else 0.0
         emissions_bess_kg = bess.get_emissions_kg(bess_discharge_kwh) if bess else 0.0
         emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh) if tess else 0.0
         total_emissions_hour_kg = emissions_grid_kg + emissions_gas_boiler_kg + emissions_electric_boiler_kg + emissions_heat_pump_kg + emissions_bess_kg + emissions_tess_kg
@@ -744,21 +744,15 @@ def run_period_simulation(
     return hourly_results
 
 
-def run_single_configuration(
-    config_name: str,
-    base_component_config: dict,
+def evaluate_configuration_full_year(
+    component_config: dict,
     electricity_series: list[tuple[datetime, float]],
     thermal_series: list[tuple[datetime, float]],
     solar_series: list[tuple[datetime, float, float]],
     heat_pump_cop_series: list[list[float]],
-) -> None:
-    component_config = apply_configuration(base_component_config, config_name)
+) -> dict:
     components = apply_component_parameters(component_config, heat_pump_cop_series=heat_pump_cop_series)
     annualization_factor = component_config["annualization"]["factor"]
-    result_fields = build_result_fields(components)
-
-    print(f"\n--- Configuration: {CONFIG_LABELS.get(config_name, config_name)} ---")
-
     full_year_results = run_period_simulation(
         components,
         annualization_factor,
@@ -772,43 +766,119 @@ def run_single_configuration(
         label=None,
     )
 
-    total_electricity_demand = sum(r["electricity_demand_kwh"] for r in full_year_results)
-    total_electricity_consumption = sum(r["total_electricity_consumption_kwh"] for r in full_year_results)
-    total_thermal_demand = sum(r["thermal_demand_kwh"] for r in full_year_results)
-    total_pv_generation = sum(r["pv_output_kwh"] for r in full_year_results) if "pv_output_kwh" in full_year_results[0] else 0.0
-    total_pv_used = sum(max(0.0, r["pv_output_kwh"] - r["grid_export_kwh"]) for r in full_year_results) if "pv_output_kwh" in full_year_results[0] else 0.0
-    total_cost_pv_om = sum(r["cost_pv_om_eur"] for r in full_year_results) if "cost_pv_om_eur" in full_year_results[0] else 0.0
-    total_cost_pv_capex = sum(r["cost_pv_capex_hour_eur"] for r in full_year_results) if "cost_pv_capex_hour_eur" in full_year_results[0] else 0.0
-    total_cost_grid = sum(r["cost_grid_eur"] for r in full_year_results) if "cost_grid_eur" in full_year_results[0] else 0.0
-    total_revenue_grid = sum(r["grid_revenue_eur"] for r in full_year_results) if "grid_revenue_eur" in full_year_results[0] else 0.0
-    total_cost_gas_boiler = sum(r["cost_gas_boiler_eur"] for r in full_year_results) if "cost_gas_boiler_eur" in full_year_results[0] else 0.0
-    total_cost_electric_boiler = sum(r["cost_electric_boiler_eur"] for r in full_year_results) if "cost_electric_boiler_eur" in full_year_results[0] else 0.0
-    total_cost_heat_pump = sum(r["cost_heat_pump_eur"] for r in full_year_results) if "cost_heat_pump_eur" in full_year_results[0] else 0.0
-    total_cost_bess = sum(r["cost_bess_eur"] for r in full_year_results) if "cost_bess_eur" in full_year_results[0] else 0.0
-    total_cost_tess = sum(r["cost_tess_eur"] for r in full_year_results) if "cost_tess_eur" in full_year_results[0] else 0.0
-    total_emissions_grid = sum(r["emissions_grid_kg"] for r in full_year_results) if "emissions_grid_kg" in full_year_results[0] else 0.0
-    total_emissions_gas_boiler = sum(r["emissions_gas_boiler_kg"] for r in full_year_results) if "emissions_gas_boiler_kg" in full_year_results[0] else 0.0
-    total_emissions_electric_boiler = sum(r["emissions_electric_boiler_kg"] for r in full_year_results) if "emissions_electric_boiler_kg" in full_year_results[0] else 0.0
-    total_emissions_tess = sum(r["emissions_tess_kg"] for r in full_year_results) if "emissions_tess_kg" in full_year_results[0] else 0.0
-    total_emissions_bess = sum(r["emissions_bess_kg"] for r in full_year_results) if "emissions_bess_kg" in full_year_results[0] else 0.0
+    total_electricity_demand_kwh = sum(r.get("electricity_demand_kwh", 0.0) for r in full_year_results)
+    total_electricity_consumption_kwh = sum(r.get("total_electricity_consumption_kwh", 0.0) for r in full_year_results)
+    total_thermal_demand_kwh = sum(r.get("thermal_demand_kwh", 0.0) for r in full_year_results)
+    total_pv_generation_kwh = sum(r.get("pv_output_kwh", 0.0) for r in full_year_results)
+    total_pv_used_kwh = sum(max(0.0, r.get("pv_output_kwh", 0.0) - r.get("grid_export_kwh", 0.0)) for r in full_year_results)
+    annual_cost_pv_capex_eur = sum(r.get("cost_pv_capex_hour_eur", 0.0) for r in full_year_results)
+    annual_cost_pv_om_eur = sum(r.get("cost_pv_om_eur", 0.0) for r in full_year_results)
+    annual_cost_grid_eur = sum(r.get("cost_grid_eur", 0.0) for r in full_year_results)
+    annual_cost_gas_boiler_eur = sum(r.get("cost_gas_boiler_eur", 0.0) for r in full_year_results)
+    annual_cost_electric_boiler_eur = sum(r.get("cost_electric_boiler_eur", 0.0) for r in full_year_results)
+    annual_cost_heat_pump_eur = sum(r.get("cost_heat_pump_eur", 0.0) for r in full_year_results)
+    annual_cost_bess_eur = sum(r.get("cost_bess_eur", 0.0) for r in full_year_results)
+    annual_cost_tess_eur = sum(r.get("cost_tess_eur", 0.0) for r in full_year_results)
+    annual_revenue_grid_eur = sum(r.get("grid_revenue_eur", 0.0) for r in full_year_results)
+    annual_cost_total_eur = (
+        annual_cost_pv_capex_eur
+        + annual_cost_pv_om_eur
+        + annual_cost_grid_eur
+        - annual_revenue_grid_eur
+        + annual_cost_gas_boiler_eur
+        + annual_cost_electric_boiler_eur
+        + annual_cost_heat_pump_eur
+        + annual_cost_bess_eur
+        + annual_cost_tess_eur
+    )
+    annual_emissions_grid_kg = sum(r.get("emissions_grid_kg", 0.0) for r in full_year_results)
+    annual_emissions_gas_boiler_kg = sum(r.get("emissions_gas_boiler_kg", 0.0) for r in full_year_results)
+    annual_emissions_electric_boiler_kg = sum(r.get("emissions_electric_boiler_kg", 0.0) for r in full_year_results)
+    annual_emissions_heat_pump_kg = sum(r.get("emissions_heat_pump_kg", 0.0) for r in full_year_results)
+    annual_emissions_bess_kg = sum(r.get("emissions_bess_kg", 0.0) for r in full_year_results)
+    annual_emissions_tess_kg = sum(r.get("emissions_tess_kg", 0.0) for r in full_year_results)
+    annual_emissions_total_kg = (
+        annual_emissions_grid_kg
+        + annual_emissions_gas_boiler_kg
+        + annual_emissions_electric_boiler_kg
+        + annual_emissions_heat_pump_kg
+        + annual_emissions_bess_kg
+        + annual_emissions_tess_kg
+    )
 
-    annual_cost_pv_capex_total = total_cost_pv_capex
-    annual_cost_pv_om = total_cost_pv_om
-    annual_cost_grid = total_cost_grid
-    annual_revenue_grid = total_revenue_grid
-    annual_cost_gas_boiler = total_cost_gas_boiler
-    annual_cost_electric_boiler = total_cost_electric_boiler
-    annual_cost_heat_pump = total_cost_heat_pump
-    annual_cost_bess = total_cost_bess
-    annual_cost_tess = total_cost_tess
-    annual_cost_total = annual_cost_pv_capex_total + annual_cost_pv_om + annual_cost_grid - annual_revenue_grid + annual_cost_gas_boiler + annual_cost_electric_boiler + annual_cost_heat_pump + annual_cost_bess + annual_cost_tess
+    return {
+        "components": components,
+        "full_year_results": full_year_results,
+        "total_electricity_demand_kwh": total_electricity_demand_kwh,
+        "total_electricity_consumption_kwh": total_electricity_consumption_kwh,
+        "total_thermal_demand_kwh": total_thermal_demand_kwh,
+        "total_pv_generation_kwh": total_pv_generation_kwh,
+        "total_pv_used_kwh": total_pv_used_kwh,
+        "annual_cost_pv_capex_eur": annual_cost_pv_capex_eur,
+        "annual_cost_pv_om_eur": annual_cost_pv_om_eur,
+        "annual_cost_grid_eur": annual_cost_grid_eur,
+        "annual_cost_gas_boiler_eur": annual_cost_gas_boiler_eur,
+        "annual_cost_electric_boiler_eur": annual_cost_electric_boiler_eur,
+        "annual_cost_heat_pump_eur": annual_cost_heat_pump_eur,
+        "annual_cost_bess_eur": annual_cost_bess_eur,
+        "annual_cost_tess_eur": annual_cost_tess_eur,
+        "annual_revenue_grid_eur": annual_revenue_grid_eur,
+        "annual_cost_total_eur": annual_cost_total_eur,
+        "annual_emissions_grid_kg": annual_emissions_grid_kg,
+        "annual_emissions_gas_boiler_kg": annual_emissions_gas_boiler_kg,
+        "annual_emissions_electric_boiler_kg": annual_emissions_electric_boiler_kg,
+        "annual_emissions_heat_pump_kg": annual_emissions_heat_pump_kg,
+        "annual_emissions_bess_kg": annual_emissions_bess_kg,
+        "annual_emissions_tess_kg": annual_emissions_tess_kg,
+        "annual_emissions_total_kg": annual_emissions_total_kg,
+    }
 
-    annual_emissions_grid = total_emissions_grid
-    annual_emissions_gas_boiler = total_emissions_gas_boiler
-    annual_emissions_electric_boiler = total_emissions_electric_boiler
-    annual_emissions_bess = total_emissions_bess
-    annual_emissions_tess = total_emissions_tess
-    annual_emissions_total = annual_emissions_grid + annual_emissions_gas_boiler + annual_emissions_electric_boiler + annual_emissions_bess + annual_emissions_tess
+
+def run_single_configuration(
+    config_name: str,
+    base_component_config: dict,
+    electricity_series: list[tuple[datetime, float]],
+    thermal_series: list[tuple[datetime, float]],
+    solar_series: list[tuple[datetime, float, float]],
+    heat_pump_cop_series: list[list[float]],
+) -> None:
+    component_config = apply_configuration(base_component_config, config_name)
+    annualization_factor = component_config["annualization"]["factor"]
+    evaluation_result = evaluate_configuration_full_year(
+        component_config,
+        electricity_series,
+        thermal_series,
+        solar_series,
+        heat_pump_cop_series,
+    )
+    components = evaluation_result["components"]
+    full_year_results = evaluation_result["full_year_results"]
+    result_fields = build_result_fields(components)
+
+    print(f"\n--- Configuration: {CONFIG_LABELS.get(config_name, config_name)} ---")
+
+    total_electricity_demand = evaluation_result["total_electricity_demand_kwh"]
+    total_electricity_consumption = evaluation_result["total_electricity_consumption_kwh"]
+    total_thermal_demand = evaluation_result["total_thermal_demand_kwh"]
+    total_pv_generation = evaluation_result["total_pv_generation_kwh"]
+    total_pv_used = evaluation_result["total_pv_used_kwh"]
+    annual_cost_pv_capex_total = evaluation_result["annual_cost_pv_capex_eur"]
+    annual_cost_pv_om = evaluation_result["annual_cost_pv_om_eur"]
+    annual_cost_grid = evaluation_result["annual_cost_grid_eur"]
+    annual_revenue_grid = evaluation_result["annual_revenue_grid_eur"]
+    annual_cost_gas_boiler = evaluation_result["annual_cost_gas_boiler_eur"]
+    annual_cost_electric_boiler = evaluation_result["annual_cost_electric_boiler_eur"]
+    annual_cost_heat_pump = evaluation_result["annual_cost_heat_pump_eur"]
+    annual_cost_bess = evaluation_result["annual_cost_bess_eur"]
+    annual_cost_tess = evaluation_result["annual_cost_tess_eur"]
+    annual_cost_total = evaluation_result["annual_cost_total_eur"]
+    annual_emissions_grid = evaluation_result["annual_emissions_grid_kg"]
+    annual_emissions_gas_boiler = evaluation_result["annual_emissions_gas_boiler_kg"]
+    annual_emissions_electric_boiler = evaluation_result["annual_emissions_electric_boiler_kg"]
+    annual_emissions_heat_pump = evaluation_result["annual_emissions_heat_pump_kg"]
+    annual_emissions_bess = evaluation_result["annual_emissions_bess_kg"]
+    annual_emissions_tess = evaluation_result["annual_emissions_tess_kg"]
+    annual_emissions_total = evaluation_result["annual_emissions_total_kg"]
 
     output_file = BASE_DIR / "Results" / "Tables" / f"hourly_results_{config_name}.csv"
     annual_output_file = BASE_DIR / "Results" / "Tables" / f"annual_results_{config_name}.csv"
@@ -836,6 +906,7 @@ def run_single_configuration(
             "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
             "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
             "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
+            "annual_emissions_heat_pump_kg": round(annual_emissions_heat_pump, 4),
             "annual_emissions_bess_kg": round(annual_emissions_bess, 4),
             "annual_emissions_tess_kg": round(annual_emissions_tess, 4),
             "annual_emissions_total_kg": round(annual_emissions_total, 4),
