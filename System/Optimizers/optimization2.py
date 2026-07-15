@@ -31,6 +31,14 @@ from data_loading import (
 from simulation import evaluate_configuration_full_year
 
 
+# Load reference annual results for Configuration A
+REF_RESULTS_PATH = BASE_DIR / "Results" / "annual_results_A_grid_gb.csv"
+_ref_df = pd.read_csv(REF_RESULTS_PATH)
+# Assumes the CSV has columns named exactly as below
+C_REF = float(_ref_df.loc[0, "annual_cost_total_eur"])
+E_REF = float(_ref_df.loc[0, "annual_emissions_total_kg"])
+
+
 class NeighborhoodCostProblem(Problem):
     def __init__(self, config_id: str):
         self.config_id = config_id
@@ -44,24 +52,34 @@ class NeighborhoodCostProblem(Problem):
         xu = np.array([self.N_PV_max, self.E_BESS_max, self.E_TESS_max])
         super().__init__(
             n_var=3,
-            n_obj=1,
+            # Multi-objective: cost and emissions
+            n_obj=2,
             n_constr=0,
             xl=xl,
             xu=xu,
         )
 
     def _evaluate(self, X, out, *args, **kwargs):
-        F = []
+        F_raw = []
+        F_norm = []
         for row in X:
             n_pv_hh, e_bess_cap, e_tess_cap = row
-            cost = run_annual_cost(
+            cost, emissions = run_annual_cost_and_emissions(
                 config_id=self.config_id,
                 n_pv_hh=float(n_pv_hh),
                 e_bess_cap=float(e_bess_cap),
                 e_tess_cap=float(e_tess_cap),
             )
-            F.append([cost])
-        out["F"] = np.array(F)
+            # Raw objectives (used by NSGA-II for now)
+            F_raw.append([cost, emissions])
+            # Normalized objectives with respect to configuration A
+            F_norm.append([cost / C_REF, emissions / E_REF])
+
+        # Use raw objectives for optimization for now
+        out["F"] = np.array(F_raw)
+        # Keep normalized objectives for potential post-processing or alternative formulations
+        out["F_raw"] = np.array(F_raw)
+        out["F_norm"] = np.array(F_norm)
 
 
 def load_all_timeseries():
@@ -94,12 +112,12 @@ def load_all_timeseries():
     return electricity_series, thermal_series, solar_series, heat_pump_cop_series
 
 
-def run_annual_cost(
+def run_annual_cost_and_emissions(
     config_id: str,
     n_pv_hh: float,
     e_bess_cap: float,
     e_tess_cap: float,
-) -> float:
+) -> tuple[float, float]:
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     component_config = apply_configuration(base_component_config, config_id)
     if "pv_system" in component_config:
@@ -117,7 +135,9 @@ def run_annual_cost(
         solar_series,
         heat_pump_cop_series,
     )
-    return float(result["annual_cost_total_eur"])
+    cost = float(result["annual_cost_total_eur"])
+    emissions = float(result["annual_emissions_total_kg"])
+    return cost, emissions
 
 
 def run_nsga2_for_config(config_id: str) -> dict:
@@ -132,25 +152,88 @@ def run_nsga2_for_config(config_id: str) -> dict:
         algorithm=algorithm,
         termination=termination,
         seed=1,
-        save_history=False,
+        save_history=True,
         verbose=True,
     )
     X = np.asarray(res.X)
-    F = np.asarray(res.F).flatten()
+    F = np.asarray(res.F)
 
-    if X.ndim == 1:
-        best_x = X
-        best_f = F[0] if F.size == 1 else F[F.argmin()]
-    else:
-        best_idx = F.argmin()
-        best_x = X[best_idx]
-        best_f = F[best_idx]
+    # For multi-objective, there is no single "best"; store the Pareto front
+    pareto_cost = F[:, 0]
+    pareto_emissions = F[:, 1]
+
+    out_dir = BASE_DIR / "Results" / "Optimization" / f"nsga2_{config_id}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Store Pareto solutions
+    df_pareto = pd.DataFrame(
+        {
+            "N_PV_hh": X[:, 0],
+            "E_BESS_cap_kwh": X[:, 1],
+            "E_TESS_cap_kwh": X[:, 2],
+            "annual_cost_total_eur": pareto_cost,
+            "annual_emissions_total_kg": pareto_emissions,
+        }
+    )
+    df_pareto.to_csv(out_dir / "pareto_solutions.csv", index=False)
+
+    # Plot Pareto frontier
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(6, 4))
+    plt.scatter(pareto_cost, pareto_emissions, c="tab:blue", s=30)
+    plt.xlabel("Annual cost [EUR/year]")
+    plt.ylabel("Annual emissions [kg CO2eq/year]")
+    plt.title(f"Pareto frontier for configuration {config_id}")
+    plt.grid(True, alpha=0.4)
+    plt.tight_layout()
+    plt.savefig(out_dir / "pareto_front.png", dpi=300)
+    plt.close()
+
+    # If history is available, track best cost/emissions over generations
+    if res.history is not None and len(res.history) > 0:
+        gen_idx = []
+        best_cost = []
+        best_emissions = []
+        for i, h in enumerate(res.history):
+            F_gen = np.asarray(h.pop.get("F"))
+            # Record minimum cost and minimum emissions in each generation
+            gen_idx.append(i)
+            best_cost.append(F_gen[:, 0].min())
+            best_emissions.append(F_gen[:, 1].min())
+
+        df_progress = pd.DataFrame(
+            {
+                "generation": gen_idx,
+                "best_cost_eur": best_cost,
+                "best_emissions_kg": best_emissions,
+            }
+        )
+        df_progress.to_csv(out_dir / "optimization_progress.csv", index=False)
+
+        plt.figure(figsize=(6, 4))
+        plt.plot(gen_idx, best_cost, label="Best cost", color="tab:blue")
+        plt.xlabel("Generation")
+        plt.ylabel("Cost [EUR/year]")
+        plt.title(f"Cost progression for configuration {config_id}")
+        plt.grid(True, alpha=0.4)
+        plt.tight_layout()
+        plt.savefig(out_dir / "progress_cost.png", dpi=300)
+        plt.close()
+
+        plt.figure(figsize=(6, 4))
+        plt.plot(gen_idx, best_emissions, label="Best emissions", color="tab:green")
+        plt.xlabel("Generation")
+        plt.ylabel("Emissions [kg CO2eq/year]")
+        plt.title(f"Emissions progression for configuration {config_id}")
+        plt.grid(True, alpha=0.4)
+        plt.tight_layout()
+        plt.savefig(out_dir / "progress_emissions.png", dpi=300)
+        plt.close()
+
     return {
         "config_id": config_id,
-        "N_PV_hh": float(best_x[0]),
-        "E_BESS_cap_kwh": float(best_x[1]),
-        "E_TESS_cap_kwh": float(best_x[2]),
-        "annual_cost_total_eur": float(best_f),
+        "pareto_solutions_file": str(out_dir / "pareto_solutions.csv"),
     }
 
 
@@ -159,10 +242,10 @@ def main_opt() -> None:
     for cfg in ["C_grid_eb_pv_bess", "D_grid_ashp_pv_bess_tess"]:
         records.append(run_nsga2_for_config(cfg))
     df = pd.DataFrame(records)
-    out_path = BASE_DIR / "Results" / "Tables" / "nsga2_best_designs_CD_2.csv"
+    out_path = BASE_DIR / "Results" / "Tables" / "nsga2_pareto_summary_CD.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
-    print(f"NSGA-II best designs for C and D written to {out_path}")
+    print(f"NSGA-II Pareto summaries for C and D written to {out_path}")
 
 
 if __name__ == "__main__":
