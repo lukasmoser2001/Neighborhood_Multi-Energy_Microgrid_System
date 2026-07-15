@@ -31,12 +31,13 @@ from data_loading import (
 from simulation import evaluate_configuration_full_year
 
 
-# Load reference annual results for Configuration A
-REF_RESULTS_PATH = BASE_DIR / "Results" / "annual_results_A_grid_gb.csv"
+# Load reference annual results for Configuration A (gas boiler)
+REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
 _ref_df = pd.read_csv(REF_RESULTS_PATH)
-# Assumes the CSV has columns named exactly as below
-C_REF = float(_ref_df.loc[0, "annual_cost_total_eur"])
-E_REF = float(_ref_df.loc[0, "annual_emissions_total_kg"])
+# Select the row corresponding to configuration A if multiple rows exist
+_ref_row = _ref_df.iloc[0]
+C_REF = float(_ref_row["annual_cost_total_eur"])
+E_REF = float(_ref_row["annual_emissions_total_kg"])
 
 
 class NeighborhoodCostProblem(Problem):
@@ -211,24 +212,25 @@ def run_nsga2_for_config(config_id: str) -> dict:
         )
         df_progress.to_csv(out_dir / "optimization_progress.csv", index=False)
 
+        # Combined plot: cost and emissions vs generation (two y-axes)
         plt.figure(figsize=(6, 4))
-        plt.plot(gen_idx, best_cost, label="Best cost", color="tab:blue")
-        plt.xlabel("Generation")
-        plt.ylabel("Cost [EUR/year]")
-        plt.title(f"Cost progression for configuration {config_id}")
-        plt.grid(True, alpha=0.4)
-        plt.tight_layout()
-        plt.savefig(out_dir / "progress_cost.png", dpi=300)
-        plt.close()
+        ax1 = plt.gca()
+        color_cost = "tab:blue"
+        color_em = "tab:green"
+        ax1.set_xlabel("Generation")
+        ax1.set_ylabel("Cost [EUR/year]", color=color_cost)
+        ax1.plot(gen_idx, best_cost, label="Best cost", color=color_cost)
+        ax1.tick_params(axis="y", labelcolor=color_cost)
 
-        plt.figure(figsize=(6, 4))
-        plt.plot(gen_idx, best_emissions, label="Best emissions", color="tab:green")
-        plt.xlabel("Generation")
-        plt.ylabel("Emissions [kg CO2eq/year]")
-        plt.title(f"Emissions progression for configuration {config_id}")
-        plt.grid(True, alpha=0.4)
+        ax2 = ax1.twinx()
+        ax2.set_ylabel("Emissions [kg CO2eq/year]", color=color_em)
+        ax2.plot(gen_idx, best_emissions, label="Best emissions", color=color_em)
+        ax2.tick_params(axis="y", labelcolor=color_em)
+
+        plt.title(f"Optimization progression for configuration {config_id}")
+        ax1.grid(True, alpha=0.4)
         plt.tight_layout()
-        plt.savefig(out_dir / "progress_emissions.png", dpi=300)
+        plt.savefig(out_dir / "progress_combined.png", dpi=300)
         plt.close()
 
     return {
