@@ -45,10 +45,10 @@ CONFIG_LABELS = {
 }
 
 EXAMPLE_DATES = [
-    ("winter", 1, 15),
-    ("spring", 4, 15),
-    ("summer", 7, 15),
-    ("autumn", 10, 15),
+    ("Winter", 1, 15),
+    ("Spring", 4, 15),
+    ("Summer", 7, 15),
+    ("Autumn", 10, 15),
 ]
 
 
@@ -977,7 +977,7 @@ def main() -> None:
     if len(electricity_series) == 0 or len(thermal_series) == 0 or len(solar_series) == 0:
         raise ValueError("At least one input series is empty")
 
-    remove_existing_output_files()
+    #remove_existing_output_files()
 
     for config_name in CONFIGURATIONS:
         run_single_configuration(config_name, copy.deepcopy(base_component_config), electricity_series, thermal_series, solar_series, heat_pump_cop_series)

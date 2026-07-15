@@ -41,7 +41,7 @@
   },
   "heat_pump_air": {
     "lcoh_eur_per_kwh": 0.135,
-    "emission_factor_kg_per_kwh": 0.17
+    "emission_factor_kg_per_kwh": 0.0
   },
   "BESS": {
     "sigma_BES": 0.00003,
