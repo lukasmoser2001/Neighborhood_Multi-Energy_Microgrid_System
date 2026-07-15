@@ -32,7 +32,7 @@ from simulation import evaluate_configuration_full_year
 
 
 # Load reference annual results for Configuration A
-REF_RESULTS_PATH = BASE_DIR / "Results" / "annual_results_A_grid_gb.csv"
+REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
 _ref_df = pd.read_csv(REF_RESULTS_PATH)
 # Assumes the CSV has columns named exactly as below
 C_REF = float(_ref_df.loc[0, "annual_cost_total_eur"])
