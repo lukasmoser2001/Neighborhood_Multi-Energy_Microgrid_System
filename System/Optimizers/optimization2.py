@@ -1,12 +1,17 @@
 from pathlib import Path
 import sys
+from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
-from pymoo.core.problem import Problem
+from pymoo.core.problem import ElementwiseProblem
+from pymoo.core.callback import Callback
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
+from pymoo.core.problem import StarmapParallelization
+from multiprocessing.pool import Pool
+from tqdm import tqdm
 
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -40,8 +45,39 @@ from simulation import evaluate_configuration_full_year
 #E_REF = float(_ref_row["annual_emissions_total_kg"])
 
 
-class NeighborhoodCostProblem(Problem):
-    def __init__(self, config_id: str):
+class TqdmCallback(Callback):
+    """pymoo Callback that drives a tqdm progress bar over generations."""
+
+    def __init__(self, n_gen: int, config_id: str) -> None:
+        super().__init__()
+        label = config_id[0]  # "C" or "D"
+        self.pbar = tqdm(
+            total=n_gen,
+            desc=f"NSGA-II [{label}]",
+            unit="gen",
+            dynamic_ncols=True,
+            colour="green",
+        )
+
+    def notify(self, algorithm) -> None:
+        F = np.asarray(algorithm.pop.get("F"))
+        best_cost = F[:, 0].min()
+        best_em = F[:, 1].min()
+        self.pbar.set_postfix(
+            cost=f"{best_cost:,.0f} EUR",
+            em=f"{best_em:,.0f} kg",
+            refresh=False,
+        )
+        self.pbar.update(1)
+
+    def close(self) -> None:
+        self.pbar.close()
+
+
+class NeighborhoodCostProblem(ElementwiseProblem):
+    """Element-wise formulation enables pymoo's built-in parallelization."""
+
+    def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
         self.N_PV_min = 0.0
         self.N_PV_max = 40.0
@@ -58,29 +94,21 @@ class NeighborhoodCostProblem(Problem):
             n_constr=0,
             xl=xl,
             xu=xu,
+            **kwargs,
         )
 
-    def _evaluate(self, X, out, *args, **kwargs):
-        F_raw = []
-        #F_norm = []
-        for row in X:
-            n_pv_hh, e_bess_cap, e_tess_cap = row
-            cost, emissions = run_annual_cost_and_emissions(
-                config_id=self.config_id,
-                n_pv_hh=float(n_pv_hh),
-                e_bess_cap=float(e_bess_cap),
-                e_tess_cap=float(e_tess_cap),
-            )
-            # Raw objectives (used by NSGA-II for now)
-            F_raw.append([cost, emissions])
-            # Normalized objectives with respect to configuration A
-            #F_norm.append([cost / C_REF, emissions / E_REF])
-
-        # Use raw objectives for optimization for now
-        out["F"] = np.array(F_raw)
-        # Keep normalized objectives for potential post-processing or alternative formulations
-        out["F_raw"] = np.array(F_raw)
-        #out["F_norm"] = np.array(F_norm)
+    def _evaluate(self, x, out, *args, **kwargs):
+        n_pv_hh, e_bess_cap, e_tess_cap = x
+        cost, emissions = run_annual_cost_and_emissions(
+            config_id=self.config_id,
+            n_pv_hh=float(n_pv_hh),
+            e_bess_cap=float(e_bess_cap),
+            e_tess_cap=float(e_tess_cap),
+        )
+        # Raw objectives (used by NSGA-II for now)
+        out["F"] = np.array([cost, emissions])
+        # Normalized objectives with respect to configuration A
+        #out["F_norm"] = np.array([cost / C_REF, emissions / E_REF])
 
 
 def load_all_timeseries():
@@ -141,21 +169,53 @@ def run_annual_cost_and_emissions(
     return cost, emissions
 
 
-def run_nsga2_for_config(config_id: str) -> dict:
-    problem = NeighborhoodCostProblem(config_id=config_id)
-    algorithm = NSGA2(
-        pop_size=50,
-        eliminate_duplicates=True,
-    )
-    termination = get_termination("n_gen", 1000)
-    res = minimize(
-        problem=problem,
-        algorithm=algorithm,
-        termination=termination,
-        seed=1,
-        save_history=True,
-        verbose=True,
-    )
+def _apply_plot_style(ax) -> None:
+    """Apply consistent IEEE-ready styling to a matplotlib Axes object."""
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.tick_params(direction="in", length=4, width=0.8, labelsize=9)
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
+
+
+def run_nsga2_for_config(config_id: str, n_gen: int = 1000, n_workers: int = 4) -> dict:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
+
+    # Short label for titles and progress bar: "C" or "D"
+    label = config_id[0]
+
+    # Parallelise individual evaluations across worker processes using pymoo's
+    # StarmapParallelization runner, which is compatible with ElementwiseProblem.
+    with Pool(n_workers) as pool:
+        runner = StarmapParallelization(pool.starmap)
+        problem = NeighborhoodCostProblem(
+            config_id=config_id,
+            elementwise_runner=runner,
+        )
+
+        algorithm = NSGA2(
+            pop_size=50,
+            eliminate_duplicates=True,
+        )
+        termination = get_termination("n_gen", n_gen)
+        callback = TqdmCallback(n_gen=n_gen, config_id=config_id)
+
+        res = minimize(
+            problem=problem,
+            algorithm=algorithm,
+            termination=termination,
+            seed=1,
+            save_history=True,
+            verbose=False,   # suppressed: tqdm callback handles progress display
+            callback=callback,
+        )
+
+    callback.close()
+
     X = np.asarray(res.X)
     F = np.asarray(res.F)
 
@@ -178,20 +238,31 @@ def run_nsga2_for_config(config_id: str) -> dict:
     )
     df_pareto.to_csv(out_dir / "pareto_solutions.csv", index=False)
 
-    # Plot Pareto frontier
-    import matplotlib.pyplot as plt
+    # ------------------------------------------------------------------
+    # Plot 1 - Pareto frontier
+    # ------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(5.5, 4.0))
+    ax.scatter(
+        pareto_cost,
+        pareto_emissions,
+        color="#1f77b4",
+        edgecolors="#0d4f8c",
+        linewidths=0.5,
+        s=40,
+        alpha=0.85,
+        zorder=3,
+    )
+    ax.set_xlabel("Annual cost [EUR/year]", fontsize=10)
+    ax.set_ylabel("Annual emissions [kg CO\u2082eq/year]", fontsize=10)
+    ax.set_title(f"Pareto frontier \u2013 {label}", fontsize=11, fontweight="bold")
+    _apply_plot_style(ax)
+    fig.tight_layout()
+    fig.savefig(out_dir / "pareto_front.pdf", dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
-    plt.figure(figsize=(6, 4))
-    plt.scatter(pareto_cost, pareto_emissions, c="tab:blue", s=30)
-    plt.xlabel("Annual cost [EUR/year]")
-    plt.ylabel("Annual emissions [kg CO2eq/year]")
-    plt.title(f"Pareto frontier for configuration {config_id}")
-    plt.grid(True, alpha=0.4)
-    plt.tight_layout()
-    plt.savefig(out_dir / "pareto_front.png", dpi=300)
-    plt.close()
-
-    # Track best cost/emissions over generations
+    # ------------------------------------------------------------------
+    # Plot 2 - Optimization progress (cost and emissions vs. generation)
+    # ------------------------------------------------------------------
     if res.history is not None and len(res.history) > 0:
         gen_idx = []
         best_cost = []
@@ -199,7 +270,7 @@ def run_nsga2_for_config(config_id: str) -> dict:
         for i, h in enumerate(res.history):
             F_gen = np.asarray(h.pop.get("F"))
             # Record minimum cost and minimum emissions in each generation
-            gen_idx.append(i)
+            gen_idx.append(i + 1)
             best_cost.append(F_gen[:, 0].min())
             best_emissions.append(F_gen[:, 1].min())
 
@@ -213,25 +284,56 @@ def run_nsga2_for_config(config_id: str) -> dict:
         df_progress.to_csv(out_dir / "optimization_progress.csv", index=False)
 
         # Combined plot: cost and emissions vs generation (two y-axes)
-        plt.figure(figsize=(6, 4))
-        ax1 = plt.gca()
-        color_cost = "tab:blue"
-        color_em = "tab:green"
-        ax1.set_xlabel("Generation")
-        ax1.set_ylabel("Cost [EUR/year]", color=color_cost)
-        ax1.plot(gen_idx, best_cost, label="Best cost", color=color_cost)
-        ax1.tick_params(axis="y", labelcolor=color_cost)
+        fig, ax1 = plt.subplots(figsize=(5.5, 4.0))
+        color_cost = "#1f77b4"
+        color_em = "#2ca02c"
+
+        ax1.plot(
+            gen_idx,
+            best_cost,
+            color=color_cost,
+            linewidth=1.2,
+            label="Best cost",
+        )
+        ax1.set_xlabel("Generation", fontsize=10)
+        ax1.set_ylabel("Cost [EUR/year]", color=color_cost, fontsize=10)
+        ax1.tick_params(axis="y", labelcolor=color_cost, direction="in", length=4, width=0.8)
+        ax1.tick_params(axis="x", direction="in", length=4, width=0.8)
+        ax1.spines["top"].set_visible(False)
+        ax1.spines["left"].set_linewidth(0.8)
+        ax1.spines["bottom"].set_linewidth(0.8)
+        ax1.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
         ax2 = ax1.twinx()
-        ax2.set_ylabel("Emissions [kg CO2eq/year]", color=color_em)
-        ax2.plot(gen_idx, best_emissions, label="Best emissions", color=color_em)
-        ax2.tick_params(axis="y", labelcolor=color_em)
+        ax2.plot(
+            gen_idx,
+            best_emissions,
+            color=color_em,
+            linewidth=1.2,
+            linestyle="--",
+            label="Best emissions",
+        )
+        ax2.set_ylabel("Emissions [kg CO\u2082eq/year]", color=color_em, fontsize=10)
+        ax2.tick_params(axis="y", labelcolor=color_em, direction="in", length=4, width=0.8)
+        ax2.spines["top"].set_visible(False)
+        ax2.spines["right"].set_linewidth(0.8)
 
-        plt.title(f"Optimization progression for configuration {config_id}")
-        ax1.grid(True, alpha=0.4)
-        plt.tight_layout()
-        plt.savefig(out_dir / "progress_combined.png", dpi=300)
-        plt.close()
+        # Combined legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(
+            lines1 + lines2,
+            labels1 + labels2,
+            fontsize=8,
+            framealpha=0.9,
+            edgecolor="lightgray",
+            loc="upper right",
+        )
+
+        fig.suptitle(f"Optimization progression \u2013 {label}", fontsize=11, fontweight="bold")
+        fig.tight_layout()
+        fig.savefig(out_dir / "progress_combined.pdf", dpi=300, bbox_inches="tight")
+        plt.close(fig)
 
     return {
         "config_id": config_id,
