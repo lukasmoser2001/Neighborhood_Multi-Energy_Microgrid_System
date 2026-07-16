@@ -179,7 +179,7 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 1000, n_workers: int = 4) -> dict:
+def run_nsga2_for_config(config_id: str, n_gen: int = 10, n_workers: int = 4) -> dict:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
