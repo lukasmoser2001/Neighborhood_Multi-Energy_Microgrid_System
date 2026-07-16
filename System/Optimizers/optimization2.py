@@ -9,7 +9,7 @@ from pymoo.core.callback import Callback
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
-from pymoo.core.problem import StarmapParallelization
+from pymoo.parallelization import StarmapParallelization
 from multiprocessing.pool import Pool
 from tqdm import tqdm
 
