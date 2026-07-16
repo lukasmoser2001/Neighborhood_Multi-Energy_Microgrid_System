@@ -31,17 +31,13 @@ from data_loading import (
 from simulation import evaluate_configuration_full_year
 
 
-<<<<<<< HEAD
-# Load reference annual results for Configuration A
-=======
-# Load reference annual results for Configuration A (gas boiler)
->>>>>>> 3b2b298a6572c9633f012451f93dabb4c6286b9b
-REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
-_ref_df = pd.read_csv(REF_RESULTS_PATH)
-# Select the row corresponding to configuration A if multiple rows exist
-_ref_row = _ref_df.iloc[0]
-C_REF = float(_ref_row["annual_cost_total_eur"])
-E_REF = float(_ref_row["annual_emissions_total_kg"])
+## Load reference annual results for Configuration A (gas boiler)
+#REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
+#_ref_df = pd.read_csv(REF_RESULTS_PATH)
+## Select the row corresponding to configuration A if multiple rows exist
+#_ref_row = _ref_df.iloc[0]
+#C_REF = float(_ref_row["annual_cost_total_eur"])
+#E_REF = float(_ref_row["annual_emissions_total_kg"])
 
 
 class NeighborhoodCostProblem(Problem):
@@ -66,7 +62,7 @@ class NeighborhoodCostProblem(Problem):
 
     def _evaluate(self, X, out, *args, **kwargs):
         F_raw = []
-        F_norm = []
+        #F_norm = []
         for row in X:
             n_pv_hh, e_bess_cap, e_tess_cap = row
             cost, emissions = run_annual_cost_and_emissions(
@@ -78,13 +74,13 @@ class NeighborhoodCostProblem(Problem):
             # Raw objectives (used by NSGA-II for now)
             F_raw.append([cost, emissions])
             # Normalized objectives with respect to configuration A
-            F_norm.append([cost / C_REF, emissions / E_REF])
+            #F_norm.append([cost / C_REF, emissions / E_REF])
 
         # Use raw objectives for optimization for now
         out["F"] = np.array(F_raw)
         # Keep normalized objectives for potential post-processing or alternative formulations
         out["F_raw"] = np.array(F_raw)
-        out["F_norm"] = np.array(F_norm)
+        #out["F_norm"] = np.array(F_norm)
 
 
 def load_all_timeseries():
@@ -148,10 +144,10 @@ def run_annual_cost_and_emissions(
 def run_nsga2_for_config(config_id: str) -> dict:
     problem = NeighborhoodCostProblem(config_id=config_id)
     algorithm = NSGA2(
-        pop_size=20,
+        pop_size=50,
         eliminate_duplicates=True,
     )
-    termination = get_termination("n_gen", 20)
+    termination = get_termination("n_gen", 1000)
     res = minimize(
         problem=problem,
         algorithm=algorithm,
@@ -195,7 +191,7 @@ def run_nsga2_for_config(config_id: str) -> dict:
     plt.savefig(out_dir / "pareto_front.png", dpi=300)
     plt.close()
 
-    # If history is available, track best cost/emissions over generations
+    # Track best cost/emissions over generations
     if res.history is not None and len(res.history) > 0:
         gen_idx = []
         best_cost = []
