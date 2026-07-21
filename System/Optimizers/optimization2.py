@@ -10,6 +10,10 @@ from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 from pymoo.parallelization import StarmapParallelization
+from pymoo.operators.sampling.rnd import FloatRandomSampling
+from pymoo.operators.crossover.sbx import SBX
+from pymoo.operators.mutation.pm import PM
+from pymoo.operators.repair.rounding import RoundingRepair
 from multiprocessing.pool import Pool
 from tqdm import tqdm
 
@@ -45,6 +49,15 @@ from simulation import evaluate_configuration_full_year
 #E_REF = float(_ref_row["annual_emissions_total_kg"])
 
 
+class _N_PV_RoundingRepair(RoundingRepair):
+    """Repair operator that rounds only the first variable (N_PV) to the nearest
+    integer while leaving E_BESS (index 1) and E_TESS (index 2) as floats."""
+
+    def do(self, problem, X, **kwargs):
+        X[:, 0] = np.round(X[:, 0]).astype(float)
+        return X
+
+
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
 
@@ -64,8 +77,8 @@ class TqdmCallback(Callback):
         best_cost = F[:, 0].min()
         best_em = F[:, 1].min()
         self.pbar.set_postfix(
-            cost=f"{best_cost:,.0f} EUR",
-            em=f"{best_em:,.0f} kg",
+            cost=f"{best_cost:,.2f} EUR",
+            em=f"{best_em:,.2f} kg",
             refresh=False,
         )
         self.pbar.update(1)
@@ -75,18 +88,24 @@ class TqdmCallback(Callback):
 
 
 class NeighborhoodCostProblem(ElementwiseProblem):
-    """Element-wise formulation enables pymoo's built-in parallelization."""
+    """Element-wise formulation enables pymoo's built-in parallelization.
+
+    Variable encoding:
+        x[0]  N_PV    -- number of PV panels per household (integer, rounded via repair)
+        x[1]  E_BESS  -- BESS capacity in kWh (float)
+        x[2]  E_TESS  -- TESS capacity in kWh (float)
+    """
 
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
-        self.N_PV_min = 0.0
-        self.N_PV_max = 40.0
-        self.E_BESS_min = 0.0
-        self.E_BESS_max = 30.0
-        self.E_TESS_min = 0.0
-        self.E_TESS_max = 40.0
-        xl = np.array([self.N_PV_min, self.E_BESS_min, self.E_TESS_min])
-        xu = np.array([self.N_PV_max, self.E_BESS_max, self.E_TESS_max])
+        self.N_PV_min: int = 0
+        self.N_PV_max: int = 40
+        self.E_BESS_min: float = 0.0
+        self.E_BESS_max: float = 30.0
+        self.E_TESS_min: float = 0.0
+        self.E_TESS_max: float = 40.0
+        xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
+        xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
         super().__init__(
             n_var=3,
             # Multi-objective: cost and emissions
@@ -98,12 +117,15 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        n_pv_hh, e_bess_cap, e_tess_cap = x
+        # N_PV is kept integer (rounded by the repair operator before evaluation)
+        n_pv_hh: int = int(round(x[0]))
+        e_bess_cap: float = float(x[1])
+        e_tess_cap: float = float(x[2])
         cost, emissions = run_annual_cost_and_emissions(
             config_id=self.config_id,
-            n_pv_hh=int(n_pv_hh),
-            e_bess_cap=int(e_bess_cap),
-            e_tess_cap=int(e_tess_cap),
+            n_pv_hh=n_pv_hh,
+            e_bess_cap=e_bess_cap,
+            e_tess_cap=e_tess_cap,
         )
         # Raw objectives (used by NSGA-II for now)
         out["F"] = np.array([cost, emissions])
@@ -114,12 +136,12 @@ class NeighborhoodCostProblem(ElementwiseProblem):
 def load_all_timeseries():
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     ups = base_component_config["neighborhood_upscaling"]
-    n_households = int(ups["n_households"])
-    sigma_log_elec = float(ups["sigma_log_electricity"])
-    sigma_log_thermal = float(ups["sigma_log_thermal"])
-    coincidence_alpha = float(ups["coincidence_alpha"])
-    seed_offset_elec = int(ups["seed_offset_electricity"])
-    seed_offset_thermal = int(ups["seed_offset_thermal"])
+    n_households: int = int(ups["n_households"])
+    sigma_log_elec: float = float(ups["sigma_log_electricity"])
+    sigma_log_thermal: float = float(ups["sigma_log_thermal"])
+    coincidence_alpha: float = float(ups["coincidence_alpha"])
+    seed_offset_elec: int = int(ups["seed_offset_electricity"])
+    seed_offset_thermal: int = int(ups["seed_offset_thermal"])
     electricity_series = read_electricity_demand(ELECTRICITY_DATA_FILE)
     thermal_series = read_thermal_demand(THERMAL_DATA_FILE)
     solar_series = read_solar_data(SOLAR_DATA_FILE)
@@ -143,14 +165,14 @@ def load_all_timeseries():
 
 def run_annual_cost_and_emissions(
     config_id: str,
-    n_pv_hh: float,
+    n_pv_hh: int,
     e_bess_cap: float,
     e_tess_cap: float,
 ) -> tuple[float, float]:
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     component_config = apply_configuration(base_component_config, config_id)
     if "pv_system" in component_config:
-        component_config["pv_system"]["panels_per_household"] = float(n_pv_hh)
+        component_config["pv_system"]["panels_per_household"] = int(n_pv_hh)
     if "BESS" in component_config:
         component_config["BESS"]["E_BES_cap"] = float(e_bess_cap)
     if "TESS" in component_config:
@@ -164,8 +186,8 @@ def run_annual_cost_and_emissions(
         solar_series,
         heat_pump_cop_series,
     )
-    cost = float(result["annual_cost_total_eur"])
-    emissions = float(result["annual_emissions_total_kg"])
+    cost: float = round(float(result["annual_cost_total_eur"]), 2)
+    emissions: float = round(float(result["annual_emissions_total_kg"]), 2)
     return cost, emissions
 
 
@@ -179,7 +201,7 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) -> dict:
+def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -197,8 +219,20 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
             elementwise_runner=runner,
         )
 
+        # -----------------------------------------------------------------
+        # NSGA-II operators
+        #   Sampling : FloatRandomSampling  - uniform random draw in [xl, xu]
+        #   Crossover: SBX (eta=15)         - standard real-valued crossover
+        #   Mutation : PM  (eta=20)         - standard real-valued mutation
+        #   Repair   : _N_PV_RoundingRepair - rounds x[0] (N_PV) to integer
+        #                                     after every crossover/mutation
+        #                                     step; x[1]/x[2] remain floats
+        # -----------------------------------------------------------------
         algorithm = NSGA2(
             pop_size=20,
+            sampling=FloatRandomSampling(),
+            crossover=SBX(prob=0.9, eta=15, repair=_N_PV_RoundingRepair()),
+            mutation=PM(eta=20, repair=_N_PV_RoundingRepair()),
             eliminate_duplicates=True,
         )
         termination = get_termination("n_gen", n_gen)
@@ -227,13 +261,14 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Store Pareto solutions
+    # N_PV_hh stored as integer; E_BESS and E_TESS as floats rounded to 2 dp
     df_pareto = pd.DataFrame(
         {
-            "N_PV_hh": X[:, 0],
-            "E_BESS_cap_kwh": X[:, 1],
-            "E_TESS_cap_kwh": X[:, 2],
-            "annual_cost_total_eur": pareto_cost,
-            "annual_emissions_total_kg": pareto_emissions,
+            "N_PV_hh": X[:, 0].round().astype(int),
+            "E_BESS_cap_kwh": X[:, 1].round(2),
+            "E_TESS_cap_kwh": X[:, 2].round(2),
+            "annual_cost_total_eur": np.round(pareto_cost, 2),
+            "annual_emissions_total_kg": np.round(pareto_emissions, 2),
         }
     )
     df_pareto.to_csv(out_dir / "pareto_solutions.csv", index=False)
@@ -271,8 +306,8 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
             F_gen = np.asarray(h.pop.get("F"))
             # Record minimum cost and minimum emissions in each generation
             gen_idx.append(i + 1)
-            best_cost.append(F_gen[:, 0].min())
-            best_emissions.append(F_gen[:, 1].min())
+            best_cost.append(round(float(F_gen[:, 0].min()), 2))
+            best_emissions.append(round(float(F_gen[:, 1].min()), 2))
 
         df_progress = pd.DataFrame(
             {
@@ -335,21 +370,10 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
         fig.savefig(out_dir / "progress_combined.pdf", dpi=300, bbox_inches="tight")
         plt.close(fig)
 
-    return {
-        "config_id": config_id,
-        "pareto_solutions_file": str(out_dir / "pareto_solutions.csv"),
-    }
-
 
 def main_opt() -> None:
-    records = []
     for cfg in ["C_grid_eb_pv_bess", "D_grid_ashp_pv_bess_tess"]:
-        records.append(run_nsga2_for_config(cfg))
-    df = pd.DataFrame(records)
-    out_path = BASE_DIR / "Results" / "Tables" / "nsga2_pareto_summary_CD.csv"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_path, index=False)
-    print(f"NSGA-II Pareto summaries for C and D written to {out_path}")
+        run_nsga2_for_config(cfg)
 
 
 if __name__ == "__main__":
