@@ -1,6 +1,5 @@
 from pathlib import Path
 import sys
-from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 
@@ -51,11 +50,20 @@ from simulation import evaluate_configuration_full_year
 
 class _N_PV_RoundingRepair(RoundingRepair):
     """Repair operator that rounds only the first variable (N_PV) to the nearest
-    integer while leaving E_BESS (index 1) and E_TESS (index 2) as floats."""
+    integer while leaving E_BESS (index 1) and E_TESS (index 2) as floats.
+
+    pymoo may pass either a 2-D population array (n_individuals x n_var) or a
+    1-D single-individual array (n_var,) depending on the call site.  Both
+    shapes are handled by reshaping to 2-D, applying the rounding, and then
+    squeezing back to the original shape.
+    """
 
     def do(self, problem, X, **kwargs):
-        X[:, 0] = np.round(X[:, 0]).astype(float)
-        return X
+        X = np.asarray(X, dtype=float)
+        scalar = X.ndim == 1
+        X2d = np.atleast_2d(X)
+        X2d[:, 0] = np.round(X2d[:, 0])
+        return X2d[0] if scalar else X2d
 
 
 class TqdmCallback(Callback):
