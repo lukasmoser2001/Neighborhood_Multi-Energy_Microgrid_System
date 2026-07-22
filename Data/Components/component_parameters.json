@@ -3,7 +3,7 @@
     "factor": 8760
   },
   "neighborhood_upscaling": {
-    "n_households": 10,
+    "n_households": 1,
     "sigma_log_electricity": 0.20,
     "sigma_log_thermal": 0.30,
     "max_shift_hours_electricity": 3,
