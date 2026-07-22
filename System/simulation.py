@@ -467,6 +467,12 @@ def plot_comparison_chart(records: list[dict]) -> Path:
     return out_path
 
 
+def run_comparison() -> None:
+    records = collect_annual_results()
+    write_comparison_table(records)
+    plot_comparison_chart(records)
+
+
 def get_example_start_index(series: list[tuple[datetime, ...]], month: int, day: int) -> int:
     for index, (timestamp, *_) in enumerate(series):
         if timestamp.month == month and timestamp.day == day:

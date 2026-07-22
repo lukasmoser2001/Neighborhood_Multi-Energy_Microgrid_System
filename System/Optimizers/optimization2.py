@@ -120,7 +120,8 @@ def load_all_timeseries():
     n_households: int = int(ups["n_households"])
     sigma_log_elec: float = float(ups["sigma_log_electricity"])
     sigma_log_thermal: float = float(ups["sigma_log_thermal"])
-    coincidence_alpha: float = float(ups["coincidence_alpha"])
+    max_shift_hours_elec: int = int(ups["max_shift_hours_electricity"])
+    max_shift_hours_thermal: int = int(ups["max_shift_hours_thermal"])
     seed_offset_elec: int = int(ups["seed_offset_electricity"])
     seed_offset_thermal: int = int(ups["seed_offset_thermal"])
     electricity_series = read_electricity_demand(ELECTRICITY_DATA_FILE)
@@ -131,14 +132,14 @@ def load_all_timeseries():
         electricity_series,
         n_households=n_households,
         sigma_log=sigma_log_elec,
-        coincidence_alpha=coincidence_alpha,
+        max_shift_hours=max_shift_hours_elec,
         seed=n_households + seed_offset_elec,
     )
     thermal_series = upscale_demand_series(
         thermal_series,
         n_households=n_households,
         sigma_log=sigma_log_thermal,
-        coincidence_alpha=coincidence_alpha,
+        max_shift_hours=max_shift_hours_thermal,
         seed=n_households + seed_offset_thermal,
     )
     return electricity_series, thermal_series, solar_series, heat_pump_cop_series
