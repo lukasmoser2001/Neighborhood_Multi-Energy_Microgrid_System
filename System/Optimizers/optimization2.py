@@ -47,25 +47,6 @@ from simulation import evaluate_configuration_full_year
 #C_REF = float(_ref_row["annual_cost_total_eur"])
 #E_REF = float(_ref_row["annual_emissions_total_kg"])
 
-
-class _N_PV_RoundingRepair(RoundingRepair):
-    """Repair operator that rounds only the first variable (N_PV) to the nearest
-    integer while leaving E_BESS (index 1) and E_TESS (index 2) as floats.
-
-    pymoo may pass either a 2-D population array (n_individuals x n_var) or a
-    1-D single-individual array (n_var,) depending on the call site.  Both
-    shapes are handled by reshaping to 2-D, applying the rounding, and then
-    squeezing back to the original shape.
-    """
-
-    def do(self, problem, X, **kwargs):
-        X = np.asarray(X, dtype=float)
-        scalar = X.ndim == 1
-        X2d = np.atleast_2d(X)
-        X2d[:, 0] = np.round(X2d[:, 0])
-        return X2d[0] if scalar else X2d
-
-
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
 
@@ -96,14 +77,6 @@ class TqdmCallback(Callback):
 
 
 class NeighborhoodCostProblem(ElementwiseProblem):
-    """Element-wise formulation enables pymoo's built-in parallelization.
-
-    Variable encoding:
-        x[0]  N_PV    -- number of PV panels per household (integer, rounded via repair)
-        x[1]  E_BESS  -- BESS capacity in kWh (float)
-        x[2]  E_TESS  -- TESS capacity in kWh (float)
-    """
-
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
         self.N_PV_min: int = 0
@@ -125,7 +98,7 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # N_PV is kept integer (rounded by the repair operator before evaluation)
+        # N_PV is kept integer 
         n_pv_hh: int = int(round(x[0]))
         e_bess_cap: float = float(x[1])
         e_tess_cap: float = float(x[2])
@@ -227,21 +200,12 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
             elementwise_runner=runner,
         )
 
-        # -----------------------------------------------------------------
-        # NSGA-II operators
-        #   Sampling : FloatRandomSampling  - uniform random draw in [xl, xu]
-        #   Crossover: SBX (eta=15)         - standard real-valued crossover
-        #   Mutation : PM  (eta=20)         - standard real-valued mutation
-        #   Repair   : _N_PV_RoundingRepair - rounds x[0] (N_PV) to integer
-        #                                     after every crossover/mutation
-        #                                     step; x[1]/x[2] remain floats
-        # -----------------------------------------------------------------
         algorithm = NSGA2(
-            pop_size=20,
-            sampling=FloatRandomSampling(),
-            crossover=SBX(prob=0.9, eta=15, repair=_N_PV_RoundingRepair()),
-            mutation=PM(eta=20, repair=_N_PV_RoundingRepair()),
-            eliminate_duplicates=True,
+         pop_size=20,
+         sampling=FloatRandomSampling(),
+         crossover=SBX(prob=0.9, eta=15),
+         mutation=PM(eta=20),
+         eliminate_duplicates=True,
         )
         termination = get_termination("n_gen", n_gen)
         callback = TqdmCallback(n_gen=n_gen, config_id=config_id)
@@ -373,7 +337,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
             loc="upper right",
         )
 
-        fig.suptitle(f"Optimization progression \u2013 {label}", fontsize=11, fontweight="bold")
+        fig.suptitle(f"Optimization progression \u2013 Configuration {label}", fontsize=11, fontweight="bold")
         fig.tight_layout()
         fig.savefig(out_dir / "progress_combined.pdf", dpi=300, bbox_inches="tight")
         plt.close(fig)
