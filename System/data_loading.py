@@ -122,14 +122,29 @@ def upscale_demand_series(
     base_series: list[tuple[datetime, float]],
     n_households: int,
     sigma_log: float,
-    coincidence_alpha: float,
+    max_shift_hours: int,
     seed: int,
 ) -> list[tuple[datetime, float]]:
+    """Aggregate demand for n_households from a single-household base series.
+
+    Each household receives:
+    - an independent lognormal amplitude scaling factor (mean=1 by construction)
+    - an independent circular time shift of up to max_shift_hours hours
+
+    The aggregate sum therefore scales linearly with n_households in expectation,
+    while individual load curves differ in both magnitude and peak timing.
+    """
     rng = np.random.default_rng(seed=seed)
     mu_log = -0.5 * sigma_log ** 2
     scaling_factors = rng.lognormal(mean=mu_log, sigma=sigma_log, size=n_households)
-    cf = float(np.clip(
-        (1.0 / np.sqrt(n_households)) * (1.0 - coincidence_alpha) + coincidence_alpha,
-        0.0, 1.0
-    ))
-    return [(ts, float(np.sum(base_val * scaling_factors) * cf)) for ts, base_val in base_series]
+    shift_hours = rng.integers(-max_shift_hours, max_shift_hours + 1, size=n_households)
+
+    base_values = np.array([val for _, val in base_series])
+    timestamps = [ts for ts, _ in base_series]
+
+    aggregate = np.zeros(len(base_values))
+    for i in range(n_households):
+        shifted = np.roll(base_values, int(shift_hours[i]))
+        aggregate += scaling_factors[i] * shifted
+
+    return list(zip(timestamps, aggregate.tolist()))

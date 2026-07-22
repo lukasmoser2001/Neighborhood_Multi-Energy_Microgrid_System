@@ -467,13 +467,6 @@ def plot_comparison_chart(records: list[dict]) -> Path:
     return out_path
 
 
-def run_comparison() -> None:
-    records = collect_annual_results()
-    write_comparison_table(records)
-    plot_comparison_chart(records)
-    print(f"  {len(records)} configuration(s) compared.")
-
-
 def get_example_start_index(series: list[tuple[datetime, ...]], month: int, day: int) -> int:
     for index, (timestamp, *_) in enumerate(series):
         if timestamp.month == month and timestamp.day == day:
@@ -945,12 +938,14 @@ def run_single_configuration(
 def main() -> None:
     base_component_config = load_component_parameters(COMPONENT_PARAMETERS_FILE)
     ups = base_component_config["neighborhood_upscaling"]
-    N_HOUSEHOLDS      = int(ups["n_households"])
-    SIGMA_LOG_ELEC    = float(ups["sigma_log_electricity"])
-    SIGMA_LOG_THERM   = float(ups["sigma_log_thermal"])
-    COINCIDENCE_ALPHA = float(ups["coincidence_alpha"])
-    SEED_OFFSET_ELEC  = int(ups["seed_offset_electricity"])
-    SEED_OFFSET_THERM = int(ups["seed_offset_thermal"])
+    N_HOUSEHOLDS           = int(ups["n_households"])
+    SIGMA_LOG_ELEC         = float(ups["sigma_log_electricity"])
+    SIGMA_LOG_THERM        = float(ups["sigma_log_thermal"])
+    MAX_SHIFT_HOURS_ELEC   = int(ups["max_shift_hours_electricity"])
+    MAX_SHIFT_HOURS_THERM  = int(ups["max_shift_hours_thermal"])
+    SEED_OFFSET_ELEC       = int(ups["seed_offset_electricity"])
+    SEED_OFFSET_THERM      = int(ups["seed_offset_thermal"])
+
     if not SOLAR_DATA_FILE.exists():
         raise FileNotFoundError(f"Solar data file not found: {SOLAR_DATA_FILE}")
 
@@ -963,14 +958,14 @@ def main() -> None:
         electricity_series,
         n_households=N_HOUSEHOLDS,
         sigma_log=SIGMA_LOG_ELEC,
-        coincidence_alpha=COINCIDENCE_ALPHA,
+        max_shift_hours=MAX_SHIFT_HOURS_ELEC,
         seed=N_HOUSEHOLDS + SEED_OFFSET_ELEC,
     )
     thermal_series = upscale_demand_series(
         thermal_series,
         n_households=N_HOUSEHOLDS,
         sigma_log=SIGMA_LOG_THERM,
-        coincidence_alpha=COINCIDENCE_ALPHA,
+        max_shift_hours=MAX_SHIFT_HOURS_THERM,
         seed=N_HOUSEHOLDS + SEED_OFFSET_THERM,
     )
 
