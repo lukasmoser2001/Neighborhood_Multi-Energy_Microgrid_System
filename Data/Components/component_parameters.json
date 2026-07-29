@@ -6,8 +6,8 @@
     "n_households": 1,
     "sigma_log_electricity": 0.0,
     "sigma_log_thermal": 0.0,
-    "max_shift_hours_electricity": 3,
-    "max_shift_hours_thermal": 2,
+    "max_shift_hours_electricity": 2,
+    "max_shift_hours_thermal": 1,
     "seed_offset_electricity": 1,
     "seed_offset_thermal": 1000
   },

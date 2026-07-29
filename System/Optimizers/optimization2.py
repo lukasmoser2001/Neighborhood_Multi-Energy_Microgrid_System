@@ -48,10 +48,6 @@ from simulation import evaluate_configuration_full_year
 #C_REF = float(_ref_row["annual_cost_total_eur"])
 #E_REF = float(_ref_row["annual_emissions_total_kg"])
 
-
-RUN_TIMESTAMP: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
 
@@ -85,11 +81,11 @@ class NeighborhoodCostProblem(ElementwiseProblem):
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
         self.N_PV_min: int = 0
-        self.N_PV_max: int = 400
+        self.N_PV_max: int = 40         # in Simulation 10
         self.E_BESS_min: float = 0.0
-        self.E_BESS_max: float = 300.0
+        self.E_BESS_max: float = 30.0   # in Simulation 3.28
         self.E_TESS_min: float = 0.0
-        self.E_TESS_max: float = 400.0
+        self.E_TESS_max: float = 40.0   # in Simulation 22.5
         xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
         xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
         super().__init__(
@@ -103,7 +99,7 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # N_PV is kept integer
+        # N_PV is kept integer 
         n_pv_hh: int = int(round(x[0]))
         e_bess_cap: float = float(x[1])
         e_tess_cap: float = float(x[2])
@@ -188,10 +184,11 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1, run_ts: str = RUN_TIMESTAMP) -> None:
+def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
 
     # Short label for titles and progress bar: "C" or "D"
     label = config_id[0]
@@ -206,7 +203,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1, ru
         )
 
         algorithm = NSGA2(
-         pop_size=20,
+         pop_size=1,
          sampling=FloatRandomSampling(),
          crossover=SBX(prob=0.9, eta=15),
          mutation=PM(eta=20),
@@ -233,8 +230,8 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1, ru
     # For multi-objective, there is no single "best"; store the Pareto front
     pareto_cost = F[:, 0]
     pareto_emissions = F[:, 1]
-
-    out_dir = BASE_DIR / "Results" / "Optimization" / run_ts / f"nsga2_{config_id}"
+    now= datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    out_dir = BASE_DIR / "Results" / f"Optimization_{str(now)}" / f"nsga2_{config_id}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Store Pareto solutions
