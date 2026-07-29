@@ -47,6 +47,17 @@ from simulation import evaluate_configuration_full_year
 # E_REF = float(_ref_row["annual_emissions_total_kg"])
 
 
+def _config_uses_tess(config_id: str) -> bool:
+    """Return True only when the configuration includes a TESS (i.e. config D).
+
+    Configuration C does not use TESS, so e_tess_cap is excluded from the
+    decision variables and the number of objectives remains 2.
+    Configuration D uses TESS, so e_tess_cap is included as a third decision
+    variable (n_var=3) while the number of objectives stays at 2.
+    """
+    return config_id.startswith("D")
+
+
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
 
@@ -79,17 +90,29 @@ class TqdmCallback(Callback):
 class NeighborhoodCostProblem(ElementwiseProblem):
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
+        self.use_tess = _config_uses_tess(config_id)
+
         self.N_PV_min: int = 0
         self.N_PV_max: int = 40  # in Simulation 10
         self.E_BESS_min: float = 0.0
         self.E_BESS_max: float = 30.0  # in Simulation 3.28
         self.E_TESS_min: float = 0.0
         self.E_TESS_max: float = 40.0  # in Simulation 22.5
-        xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
-        xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
+
+        if self.use_tess:
+            # Config D: 3 decision variables (N_PV, E_BESS, E_TESS)
+            xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
+            xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
+            n_var = 3
+        else:
+            # Config C: 2 decision variables (N_PV, E_BESS) -- TESS excluded
+            xl = np.array([float(self.N_PV_min), self.E_BESS_min])
+            xu = np.array([float(self.N_PV_max), self.E_BESS_max])
+            n_var = 2
+
         super().__init__(
-            n_var=3,
-            # Multi-objective: cost and emissions
+            n_var=n_var,
+            # Multi-objective: cost and emissions (2 objectives for both configs)
             n_obj=2,
             n_constr=0,
             xl=xl,
@@ -101,14 +124,16 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         # N_PV is kept integer
         n_pv_hh: int = int(round(x[0]))
         e_bess_cap: float = float(x[1])
-        e_tess_cap: float = float(x[2])
+        # e_tess_cap is only present for config D; fixed at 0 for config C
+        e_tess_cap: float = float(x[2]) if self.use_tess else 0.0
+
         cost, emissions = run_annual_cost_and_emissions(
             config_id=self.config_id,
             n_pv_hh=n_pv_hh,
             e_bess_cap=e_bess_cap,
             e_tess_cap=e_tess_cap,
         )
-        # Raw objectives (used by NSGA-II for now)
+        # Raw objectives (used by NSGA-II): cost and emissions
         out["F"] = np.array([cost, emissions])
         # Normalized objectives with respect to configuration A
         # out["F_norm"] = np.array([cost / C_REF, emissions / E_REF])
@@ -194,6 +219,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 20) -
 
     # Short label for titles and progress bar: "C" or "D"
     label = config_id[0]
+    use_tess = _config_uses_tess(config_id)
 
     # Parallelise individual evaluations across worker processes using pymoo's
     # StarmapParallelization runner, which is compatible with ElementwiseProblem.
@@ -237,16 +263,18 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 20) -
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Store Pareto solutions
-    # N_PV_hh stored as integer; E_BESS and E_TESS as floats rounded to 2 dp
-    df_pareto = pd.DataFrame(
-        {
-            "N_PV_hh": X[:, 0].round().astype(int),
-            "E_BESS_cap_kwh": X[:, 1].round(2),
-            "E_TESS_cap_kwh": X[:, 2].round(2),
-            "annual_cost_total_eur": np.round(pareto_cost, 2),
-            "annual_emissions_total_kg": np.round(pareto_emissions, 2),
-        }
-    )
+    # N_PV_hh stored as integer; E_BESS as float rounded to 2 dp
+    # E_TESS_cap_kwh column only present for config D (use_tess=True)
+    pareto_dict = {
+        "N_PV_hh": X[:, 0].round().astype(int),
+        "E_BESS_cap_kwh": X[:, 1].round(2),
+        "annual_cost_total_eur": np.round(pareto_cost, 2),
+        "annual_emissions_total_kg": np.round(pareto_emissions, 2),
+    }
+    if use_tess:
+        pareto_dict["E_TESS_cap_kwh"] = X[:, 2].round(2)
+
+    df_pareto = pd.DataFrame(pareto_dict)
     df_pareto.to_csv(out_dir / "pareto_solutions.csv", index=False)
 
     # ------------------------------------------------------------------
