@@ -1,5 +1,5 @@
 config,configuration_label,annual_cost_total_eur,annual_emissions_total_kg
-A_grid_gb,A: Grid + Gas Boiler,3711.68,511.11
-B_grid_eb,B: Grid + Electric Boiler,8253.11,509.55
-C_grid_eb_pv_bess,C: Grid + Electric Boiler + PV + BESS,8374.39,406.9
-D_grid_ashp_pv_bess_tess,D: Grid + ASHP + PV + BESS + TESS,4327.5,181.33
+A_grid_gb,A: Grid + Gas Boiler,3711.68,560.83
+B_grid_eb,B: Grid + Electric Boiler,8253.11,713.37
+C_grid_eb_pv_bess,C: Grid + Electric Boiler + PV + BESS,8358.62,738.89
+D_grid_ashp_pv_bess_tess,D: Grid + ASHP + PV + BESS + TESS,4315.18,420.66

@@ -14,7 +14,7 @@
   "utility_grid": {
     "electricity_price_eur_per_kwh": 0.19266,
     "sell_price_eur_per_kwh": 0.08345,
-    "emission_factor_kg_per_kwh": 0.020,
+    "emission_factor_kg_per_kwh": 0.0285,
     "yearly_subscription_eur_per_year": 235.9
   },
   "pv_system": {
