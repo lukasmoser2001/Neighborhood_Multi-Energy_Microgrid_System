@@ -3,13 +3,13 @@
     "factor": 8760
   },
   "neighborhood_upscaling": {
-    "n_households": 1,
-    "sigma_log_electricity": 0.0,
-    "sigma_log_thermal": 0.0,
+    "n_households": 100,
+    "sigma_log_electricity": 0.2,
+    "sigma_log_thermal": 0.3,
     "max_shift_hours_electricity": 2,
     "max_shift_hours_thermal": 1,
-    "seed_offset_electricity": 1,
-    "seed_offset_thermal": 1000
+    "seed_offset_electricity": 42,
+    "seed_offset_thermal": 123
   },
   "utility_grid": {
     "electricity_price_eur_per_kwh": 0.19266,
@@ -29,7 +29,7 @@
     "power_density_w_m2": 226,
     "annualized_capital_cost_per_panel_eur": 15.74,
     "o_and_m_cost_per_kwh_eur": 0.01,
-    "leoe_kg_co2eq_per_kwh": 0.0274
+    "leoe_kg_co2eq_per_kwh": 0.0108
   },
   "gas_boiler": {
     "efficiency": 0.986,

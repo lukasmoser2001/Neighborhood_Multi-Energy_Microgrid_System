@@ -25,4 +25,3 @@ wheels/
 
 # Data files to ignore (generated summaries)
 Data/Load/Heat/when2heat.csv
-Results/data_analysis.ipynb

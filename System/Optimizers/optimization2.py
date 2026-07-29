@@ -210,7 +210,7 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 20) -> None:
+def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 25) -> None:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -231,7 +231,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 20) -
         )
 
         algorithm = NSGA2(
-            pop_size=500,
+            pop_size=200,
             sampling=FloatRandomSampling(),
             crossover=SBX(prob=0.9, eta=15),
             mutation=PM(eta=20),

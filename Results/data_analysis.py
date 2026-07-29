@@ -7,24 +7,24 @@ from sklearn.preprocessing import StandardScaler
 
 # 1. Load the data
 df = pd.read_csv(
-    "Results/Optimization_2026-07-29_14-39-36/nsga2_C_grid_eb_pv_bess/pareto_solutions.csv"
+    "Results/Optimization_2026-07-29_17-41-05/nsga2_D_grid_ashp_pv_bess_tess/pareto_solutions.csv"
 )
 
-# 2. Setup the figure for the plots
+# 2. Setup the figure for the plot
 fig, axes = plt.subplots(1, 2, figsize=(15, 6))
 
 # --- Comparative Plot ---
 sns.scatterplot(
     data=df,
-    x="E_BESS_cap_kwh",
-    y="annual_cost_total_eur",
+    x="E_TESS_cap_kwh",
+    y="E_BESS_cap_kwh",
     ax=axes[0],
     color="blue",
     alpha=0.7,
 )
-axes[0].set_title("Comparative Plot: Annual Cost vs E_BESS_cap_kwh")
-axes[0].set_xlabel("Battery Storage Capacity (E_BESS_cap_kwh)")
-axes[0].set_ylabel("Annual Total Cost (EUR)")
+axes[0].set_title("Comparative Plot: E_BESS_cap_kwh vs E_TESS_cap_kwh")
+axes[0].set_xlabel("Thermal Storage Capacity (E_TESS_cap_kwh)")
+axes[0].set_ylabel("Battery Storage Capacity (E_BESS_cap_kwh)")
 axes[0].grid(True, linestyle="--", alpha=0.6)
 
 # --- PCA Preparation & Execution ---
@@ -32,7 +32,7 @@ axes[0].grid(True, linestyle="--", alpha=0.6)
 features = [
     "N_PV_hh",
     "E_BESS_cap_kwh",
-    # "E_TESS_cap_kwh",
+    "E_TESS_cap_kwh",
     "annual_cost_total_eur",
     "annual_emissions_total_kg",
 ]
