@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.core.callback import Callback
@@ -46,6 +47,10 @@ from simulation import evaluate_configuration_full_year
 #_ref_row = _ref_df.iloc[0]
 #C_REF = float(_ref_row["annual_cost_total_eur"])
 #E_REF = float(_ref_row["annual_emissions_total_kg"])
+
+
+RUN_TIMESTAMP: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
 
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
@@ -98,7 +103,7 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # N_PV is kept integer 
+        # N_PV is kept integer
         n_pv_hh: int = int(round(x[0]))
         e_bess_cap: float = float(x[1])
         e_tess_cap: float = float(x[2])
@@ -183,11 +188,10 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) -> None:
+def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1, run_ts: str = RUN_TIMESTAMP) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    import matplotlib.ticker as mticker
 
     # Short label for titles and progress bar: "C" or "D"
     label = config_id[0]
@@ -230,7 +234,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 20, n_workers: int = 1) ->
     pareto_cost = F[:, 0]
     pareto_emissions = F[:, 1]
 
-    out_dir = BASE_DIR / "Results" / "Optimization" / f"nsga2_{config_id}"
+    out_dir = BASE_DIR / "Results" / "Optimization" / run_ts / f"nsga2_{config_id}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Store Pareto solutions
