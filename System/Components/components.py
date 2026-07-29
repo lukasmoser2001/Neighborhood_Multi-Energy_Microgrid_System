@@ -68,6 +68,7 @@ class PVSystem:
             self.power_density_w_m2 = 0.0
             self.capex_per_panel_eur = 0.0
             self.om_cost_per_kwh = 0.0
+            self.leoe_kg_co2eq_per_kwh = 0.0
             self.p_pv_peak_kw = 0.0
             self.capex_total_eur = 0.0
             return
@@ -83,6 +84,7 @@ class PVSystem:
             self.power_density_w_m2 = cfg["power_density_w_m2"]
             self.capex_per_panel_eur = cfg["annualized_capital_cost_per_panel_eur"]
             self.om_cost_per_kwh = cfg["o_and_m_cost_per_kwh_eur"]
+            self.leoe_kg_co2eq_per_kwh = cfg.get("leoe_kg_co2eq_per_kwh", 0.0)
         except KeyError as e:
             raise ValueError(f"Missing required parameter {e.args[0]!r} for PVSystem in component_parameters.json")
         self.p_pv_peak_kw = self.power_density_w_m2 * self.panel_area_m2 * self.panels_per_household / 1000.0
@@ -101,6 +103,10 @@ class PVSystem:
 
     def get_om_cost_eur(self, pv_output_kwh: float) -> float:
         return pv_output_kwh * self.om_cost_per_kwh
+
+    def get_emissions_kg(self, pv_output_kwh: float) -> float:
+        """Lifecycle operational emissions (LEOE) for PV generation [kg CO2eq]."""
+        return pv_output_kwh * self.leoe_kg_co2eq_per_kwh
 
 
 class GasBoiler:

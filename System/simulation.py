@@ -105,6 +105,7 @@ def build_result_fields(components: dict) -> list[str]:
             "pv_cell_temp_c",
             "cost_pv_capex_hour_eur",
             "cost_pv_om_eur",
+            "emissions_pv_kg",
         )
     if "gas_boiler" in components:
         fields += ["gas_boiler_heat_kwh", "cost_gas_boiler_eur", "emissions_gas_boiler_kg"]
@@ -175,6 +176,7 @@ def build_annual_result_fields(components: dict) -> list[str]:
             "annual_cost_pv_capex_eur",
             "annual_cost_pv_om_eur",
             "annual_revenue_grid_eur",
+            "annual_emissions_pv_kg",
         ]
 
     if "gas_boiler" in components:
@@ -650,9 +652,11 @@ def run_period_simulation(
 
         cost_pv_capex_hour_eur = 0.0
         cost_pv_om_eur = 0.0
+        emissions_pv_kg = 0.0
         if pv:
             cost_pv_capex_hour_eur = pv.get_capex_hour_eur(annualization_factor)
             cost_pv_om_eur = pv.get_om_cost_eur(pv_output_kwh)
+            emissions_pv_kg = pv.get_emissions_kg(pv_output_kwh)
 
         cost_grid_eur = 0.0
         cost_grid_subscription_eur = 0.0
@@ -692,7 +696,15 @@ def run_period_simulation(
         emissions_heat_pump_kg = heat_pump_air.get_emissions_kg(heat_pump_heat_kwh) if heat_pump_air else 0.0
         emissions_bess_kg = bess.get_emissions_kg(bess_discharge_kwh) if bess else 0.0
         emissions_tess_kg = tess.get_emissions_kg(tess_discharge_kwh) if tess else 0.0
-        total_emissions_hour_kg = emissions_grid_kg + emissions_gas_boiler_kg + emissions_electric_boiler_kg + emissions_heat_pump_kg + emissions_bess_kg + emissions_tess_kg
+        total_emissions_hour_kg = (
+            emissions_grid_kg
+            + emissions_pv_kg
+            + emissions_gas_boiler_kg
+            + emissions_electric_boiler_kg
+            + emissions_heat_pump_kg
+            + emissions_bess_kg
+            + emissions_tess_kg
+        )
 
         hourly_results.append(
             {
@@ -722,6 +734,7 @@ def run_period_simulation(
                 "tess_discharge_kwh": round(tess_discharge_kwh, 4),
                 "cost_pv_capex_hour_eur": round(cost_pv_capex_hour_eur, 4),
                 "cost_pv_om_eur": round(cost_pv_om_eur, 4),
+                "emissions_pv_kg": round(emissions_pv_kg, 6),
                 "cost_grid_eur": round(cost_grid_eur, 4),
                 "cost_grid_subscription_eur": round(cost_grid_subscription_eur, 4),
                 "cost_gas_boiler_eur": round(cost_gas_boiler_eur, 4),
@@ -791,6 +804,7 @@ def evaluate_configuration_full_year(
         + annual_cost_tess_eur
     )
     annual_emissions_grid_kg = sum(r.get("emissions_grid_kg", 0.0) for r in full_year_results)
+    annual_emissions_pv_kg = sum(r.get("emissions_pv_kg", 0.0) for r in full_year_results)
     annual_emissions_gas_boiler_kg = sum(r.get("emissions_gas_boiler_kg", 0.0) for r in full_year_results)
     annual_emissions_electric_boiler_kg = sum(r.get("emissions_electric_boiler_kg", 0.0) for r in full_year_results)
     annual_emissions_heat_pump_kg = sum(r.get("emissions_heat_pump_kg", 0.0) for r in full_year_results)
@@ -798,6 +812,7 @@ def evaluate_configuration_full_year(
     annual_emissions_tess_kg = sum(r.get("emissions_tess_kg", 0.0) for r in full_year_results)
     annual_emissions_total_kg = (
         annual_emissions_grid_kg
+        + annual_emissions_pv_kg
         + annual_emissions_gas_boiler_kg
         + annual_emissions_electric_boiler_kg
         + annual_emissions_heat_pump_kg
@@ -824,6 +839,7 @@ def evaluate_configuration_full_year(
         "annual_revenue_grid_eur": annual_revenue_grid_eur,
         "annual_cost_total_eur": annual_cost_total_eur,
         "annual_emissions_grid_kg": annual_emissions_grid_kg,
+        "annual_emissions_pv_kg": annual_emissions_pv_kg,
         "annual_emissions_gas_boiler_kg": annual_emissions_gas_boiler_kg,
         "annual_emissions_electric_boiler_kg": annual_emissions_electric_boiler_kg,
         "annual_emissions_heat_pump_kg": annual_emissions_heat_pump_kg,
@@ -872,6 +888,7 @@ def run_single_configuration(
     annual_cost_tess = evaluation_result["annual_cost_tess_eur"]
     annual_cost_total = evaluation_result["annual_cost_total_eur"]
     annual_emissions_grid = evaluation_result["annual_emissions_grid_kg"]
+    annual_emissions_pv = evaluation_result["annual_emissions_pv_kg"]
     annual_emissions_gas_boiler = evaluation_result["annual_emissions_gas_boiler_kg"]
     annual_emissions_electric_boiler = evaluation_result["annual_emissions_electric_boiler_kg"]
     annual_emissions_heat_pump = evaluation_result["annual_emissions_heat_pump_kg"]
@@ -903,6 +920,7 @@ def run_single_configuration(
             "annual_revenue_grid_eur": round(annual_revenue_grid, 4),
             "annual_cost_total_eur": round(annual_cost_total, 4),
             "annual_emissions_grid_kg": round(annual_emissions_grid, 4),
+            "annual_emissions_pv_kg": round(annual_emissions_pv, 4),
             "annual_emissions_gas_boiler_kg": round(annual_emissions_gas_boiler, 4),
             "annual_emissions_electric_boiler_kg": round(annual_emissions_electric_boiler, 4),
             "annual_emissions_heat_pump_kg": round(annual_emissions_heat_pump, 4),
