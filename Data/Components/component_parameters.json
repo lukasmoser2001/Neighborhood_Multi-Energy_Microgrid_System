@@ -4,11 +4,11 @@
   },
   "neighborhood_upscaling": {
     "n_households": 1,
-    "sigma_log_electricity": 0.20,
-    "sigma_log_thermal": 0.30,
+    "sigma_log_electricity": 0.0,
+    "sigma_log_thermal": 0.0,
     "max_shift_hours_electricity": 3,
     "max_shift_hours_thermal": 2,
-    "seed_offset_electricity": 0,
+    "seed_offset_electricity": 1,
     "seed_offset_thermal": 1000
   },
   "utility_grid": {

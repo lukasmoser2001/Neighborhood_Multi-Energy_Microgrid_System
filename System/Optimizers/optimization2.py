@@ -80,11 +80,11 @@ class NeighborhoodCostProblem(ElementwiseProblem):
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
         self.N_PV_min: int = 0
-        self.N_PV_max: int = 40
+        self.N_PV_max: int = 400
         self.E_BESS_min: float = 0.0
-        self.E_BESS_max: float = 30.0
+        self.E_BESS_max: float = 300.0
         self.E_TESS_min: float = 0.0
-        self.E_TESS_max: float = 40.0
+        self.E_TESS_max: float = 400.0
         xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
         xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
         super().__init__(

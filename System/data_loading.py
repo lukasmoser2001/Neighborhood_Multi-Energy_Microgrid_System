@@ -125,15 +125,6 @@ def upscale_demand_series(
     max_shift_hours: int,
     seed: int,
 ) -> list[tuple[datetime, float]]:
-    """Aggregate demand for n_households from a single-household base series.
-
-    Each household receives:
-    - an independent lognormal amplitude scaling factor (mean=1 by construction)
-    - an independent circular time shift of up to max_shift_hours hours
-
-    The aggregate sum therefore scales linearly with n_households in expectation,
-    while individual load curves differ in both magnitude and peak timing.
-    """
     rng = np.random.default_rng(seed=seed)
     mu_log = -0.5 * sigma_log ** 2
     scaling_factors = rng.lognormal(mean=mu_log, sigma=sigma_log, size=n_households)
