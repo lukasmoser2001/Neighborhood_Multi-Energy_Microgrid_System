@@ -17,7 +17,6 @@ from pymoo.operators.repair.rounding import RoundingRepair
 from multiprocessing.pool import Pool
 from tqdm import tqdm
 
-
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -39,14 +38,14 @@ from data_loading import (
 )
 from simulation import evaluate_configuration_full_year
 
-
 ## Load reference annual results for Configuration A (gas boiler)
-#REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
-#_ref_df = pd.read_csv(REF_RESULTS_PATH)
+# REF_RESULTS_PATH = BASE_DIR / "Results" / "Tables" / "annual_results_A_grid_gb.csv"
+# _ref_df = pd.read_csv(REF_RESULTS_PATH)
 ## Select the row corresponding to configuration A if multiple rows exist
-#_ref_row = _ref_df.iloc[0]
-#C_REF = float(_ref_row["annual_cost_total_eur"])
-#E_REF = float(_ref_row["annual_emissions_total_kg"])
+# _ref_row = _ref_df.iloc[0]
+# C_REF = float(_ref_row["annual_cost_total_eur"])
+# E_REF = float(_ref_row["annual_emissions_total_kg"])
+
 
 class TqdmCallback(Callback):
     """pymoo Callback that drives a tqdm progress bar over generations."""
@@ -81,11 +80,11 @@ class NeighborhoodCostProblem(ElementwiseProblem):
     def __init__(self, config_id: str, **kwargs):
         self.config_id = config_id
         self.N_PV_min: int = 0
-        self.N_PV_max: int = 40         # in Simulation 10
+        self.N_PV_max: int = 40  # in Simulation 10
         self.E_BESS_min: float = 0.0
-        self.E_BESS_max: float = 30.0   # in Simulation 3.28
+        self.E_BESS_max: float = 30.0  # in Simulation 3.28
         self.E_TESS_min: float = 0.0
-        self.E_TESS_max: float = 40.0   # in Simulation 22.5
+        self.E_TESS_max: float = 40.0  # in Simulation 22.5
         xl = np.array([float(self.N_PV_min), self.E_BESS_min, self.E_TESS_min])
         xu = np.array([float(self.N_PV_max), self.E_BESS_max, self.E_TESS_max])
         super().__init__(
@@ -99,7 +98,7 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        # N_PV is kept integer 
+        # N_PV is kept integer
         n_pv_hh: int = int(round(x[0]))
         e_bess_cap: float = float(x[1])
         e_tess_cap: float = float(x[2])
@@ -112,7 +111,7 @@ class NeighborhoodCostProblem(ElementwiseProblem):
         # Raw objectives (used by NSGA-II for now)
         out["F"] = np.array([cost, emissions])
         # Normalized objectives with respect to configuration A
-        #out["F_norm"] = np.array([cost / C_REF, emissions / E_REF])
+        # out["F_norm"] = np.array([cost / C_REF, emissions / E_REF])
 
 
 def load_all_timeseries():
@@ -161,7 +160,9 @@ def run_annual_cost_and_emissions(
     if "TESS" in component_config:
         component_config["TESS"]["E_TESS_cap"] = float(e_tess_cap)
 
-    electricity_series, thermal_series, solar_series, heat_pump_cop_series = load_all_timeseries()
+    electricity_series, thermal_series, solar_series, heat_pump_cop_series = (
+        load_all_timeseries()
+    )
     result = evaluate_configuration_full_year(
         component_config,
         electricity_series,
@@ -184,8 +185,9 @@ def _apply_plot_style(ax) -> None:
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5, color="gray")
 
 
-def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> None:
+def run_nsga2_for_config(config_id: str, n_gen: int = 60, n_workers: int = 20) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.ticker as mticker
@@ -203,11 +205,11 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
         )
 
         algorithm = NSGA2(
-         pop_size=1,
-         sampling=FloatRandomSampling(),
-         crossover=SBX(prob=0.9, eta=15),
-         mutation=PM(eta=20),
-         eliminate_duplicates=True,
+            pop_size=500,
+            sampling=FloatRandomSampling(),
+            crossover=SBX(prob=0.9, eta=15),
+            mutation=PM(eta=20),
+            eliminate_duplicates=True,
         )
         termination = get_termination("n_gen", n_gen)
         callback = TqdmCallback(n_gen=n_gen, config_id=config_id)
@@ -218,7 +220,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
             termination=termination,
             seed=1,
             save_history=True,
-            verbose=False,   # suppressed: tqdm callback handles progress display
+            verbose=False,  # suppressed: tqdm callback handles progress display
             callback=callback,
         )
 
@@ -230,7 +232,7 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
     # For multi-objective, there is no single "best"; store the Pareto front
     pareto_cost = F[:, 0]
     pareto_emissions = F[:, 1]
-    now= datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     out_dir = BASE_DIR / "Results" / f"Optimization_{str(now)}" / f"nsga2_{config_id}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -263,7 +265,9 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
     )
     ax.set_xlabel("Annual cost [EUR/year]", fontsize=10)
     ax.set_ylabel("Annual emissions [kg CO\u2082eq/year]", fontsize=10)
-    ax.set_title(f"Pareto frontier \u2013 Configuration {label}", fontsize=11, fontweight="bold")
+    ax.set_title(
+        f"Pareto frontier \u2013 Configuration {label}", fontsize=11, fontweight="bold"
+    )
     _apply_plot_style(ax)
     fig.tight_layout()
     fig.savefig(out_dir / "pareto_front.pdf", dpi=300, bbox_inches="tight")
@@ -306,7 +310,9 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
         )
         ax1.set_xlabel("Generation", fontsize=10)
         ax1.set_ylabel("Cost [EUR/year]", color=color_cost, fontsize=10)
-        ax1.tick_params(axis="y", labelcolor=color_cost, direction="in", length=4, width=0.8)
+        ax1.tick_params(
+            axis="y", labelcolor=color_cost, direction="in", length=4, width=0.8
+        )
         ax1.tick_params(axis="x", direction="in", length=4, width=0.8)
         ax1.spines["top"].set_visible(False)
         ax1.spines["left"].set_linewidth(0.8)
@@ -323,7 +329,9 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
             label="Best emissions",
         )
         ax2.set_ylabel("Emissions [kg CO\u2082eq/year]", color=color_em, fontsize=10)
-        ax2.tick_params(axis="y", labelcolor=color_em, direction="in", length=4, width=0.8)
+        ax2.tick_params(
+            axis="y", labelcolor=color_em, direction="in", length=4, width=0.8
+        )
         ax2.spines["top"].set_visible(False)
         ax2.spines["right"].set_linewidth(0.8)
 
@@ -339,7 +347,11 @@ def run_nsga2_for_config(config_id: str, n_gen: int = 1, n_workers: int = 1) -> 
             loc="upper right",
         )
 
-        fig.suptitle(f"Optimization progression \u2013 Configuration {label}", fontsize=11, fontweight="bold")
+        fig.suptitle(
+            f"Optimization progression \u2013 Configuration {label}",
+            fontsize=11,
+            fontweight="bold",
+        )
         fig.tight_layout()
         fig.savefig(out_dir / "progress_combined.pdf", dpi=300, bbox_inches="tight")
         plt.close(fig)
