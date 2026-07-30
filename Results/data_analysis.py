@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 
 # 1. Load the data
 df = pd.read_csv(
-    "Results/Optimization_2026-07-29_17-41-05/nsga2_D_grid_ashp_pv_bess_tess/pareto_solutions.csv"
+    "Results/STOchastic/D2/Pop_200_N_100_Gen_60_D2_STO/nsga2_D_grid_ashp_pv_bess_tess/pareto_solutions.csv"
 )
 
 # 2. Setup the figure for the plot
@@ -50,6 +50,13 @@ components = pca.fit_transform(X_scaled)
 df["PC1"] = components[:, 0]
 df["PC2"] = components[:, 1]
 
+loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=features)
+
+print("PCA Loadings (Weights of original features in each PC):")
+print(loadings)
+print("\nExplained variance ratio:")
+print(pca.explained_variance_ratio_)
+
 # --- PCA Plot ---
 sns.scatterplot(data=df, x="PC1", y="PC2", ax=axes[1], color="coral", alpha=0.7)
 axes[1].set_title("PCA: First Two Principal Components")
@@ -63,11 +70,3 @@ axes[1].grid(True, linestyle="--", alpha=0.6)
 
 plt.tight_layout()
 plt.show()
-
-# 3. Explain the directions (extract and print loadings)
-loadings = pd.DataFrame(pca.components_.T, columns=["PC1", "PC2"], index=features)
-
-print("PCA Loadings (Weights of original features in each PC):")
-print(loadings)
-print("\nExplained variance ratio:")
-print(pca.explained_variance_ratio_)
