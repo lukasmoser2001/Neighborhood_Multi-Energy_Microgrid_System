@@ -1,0 +1,1460 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[british]{babel}
+\usepackage{graphicx}  
+\usepackage{geometry}  % For adjusting page margins
+\geometry{margin=2.5cm}
+\usepackage{fancyhdr}  
+\usepackage{tocloft}   % For customizing table of contents, lists
+\usepackage{titlesec}  % For formatting chapter/section titles
+\usepackage{amsmath,amssymb}  % For mathematical equations and symbols
+\usepackage{booktabs}  % For tables
+\usepackage{array}     % For table column definitions
+\usepackage{subcaption} % For subfigures
+\usepackage{booktabs} % For cleaner tables
+\usepackage{float} % Control of placement
+\usepackage{siunitx}  
+\usepackage[official]{eurosym}
+\usepackage{hyperref} 
+\usepackage{csquotes}
+\usepackage[backend=biber,style=ieee,sorting=none]{biblatex}
+\addbibresource{references.bib}
+\usepackage{etoolbox}  
+\usepackage{titlesec}
+\graphicspath{{Figures/}}
+
+\pagestyle{fancy}
+\fancyhf{}  
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+\begin{document}
+
+% Title page
+\thispagestyle{empty}
+\begin{titlepage}
+  \centering
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth,height=3.2cm,keepaspectratio]{Logo_UPC_pillars.pdf}
+  \end{minipage}%
+  \hfill
+  \begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.9\textwidth,height=3.2cm,keepaspectratio]{logo-utc-su-avenues.pdf}
+  \end{minipage}\\[0.5cm]
+
+ \centering
+  \includegraphics[width=0.35\textwidth,height=3.5cm,keepaspectratio,trim=1mm 10mm 1mm 10mm,clip]{LOGO-EMSSE-final.pdf}\\[1cm]
+
+  {\Huge \textbf{Master Thesis}\\[0.3cm]}
+  {\Large European Master in Sustainable Systems Engineering}\\[1cm]
+{\LARGE\bfseries
+Development of a Neighborhood\\[0.2cm]
+Multi-Energy System\\[0.2cm]
+via Microgrid Concept
+}\vspace{1cm}
+
+\includegraphics[width=\textwidth,height=4cm,keepaspectratio,trim=70mm 70mm 70mm 70mm,clip]{UPC-building.pdf}\\[1cm]
+
+  {\large Author: Lukas Moser BSc.}\\[0.4cm]
+
+  {\normalsize Supervisor: Associate Professor Berk Celik}\\[0.1cm]
+  \textit{Université de technologie de Compiègne} \\[0.2cm]
+  {\normalsize Co-Supervisor: Assistant Professor Christian Mata} \\[0.1cm]
+  \textit{Universitat Politècnica de Catalunya}\\[0.4cm]
+
+  {\Large September 2026}
+\end{titlepage}
+
+\pagenumbering{Roman}
+\setcounter{page}{1}
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\noindent This thesis develops and validates a proof of concept for a multi-energy microgrid designed to enable the local exchange of thermal and electrical energy within a neighborhood-scale residential system. The proposed architecture integrates multiple renewable energy sources, including photovoltaic panels, solar thermal collectors, and heat pumps, in combination with both battery and thermal energy storage systems and compares it with conventional systems including gas and electric boilers.
+
+The project first focuses on the development of a comprehensive modeling and simulation framework to represent the behavior and interactions of the integrated energy system at the neighborhood level. This framework captures the dynamics of energy generation, storage, and consumption, enabling the evaluation of system performance under varying conditions. System-level simulations are used to validate the proposed methodology and to demonstrate the feasibility of locally produced renewable energy utilization within a neighborhood energy network, thereby supporting the transition toward decentralized and sustainable energy communities.
+
+Building on this foundation, the thesis then addresses the optimal sizing of system components using a genetic algorithm-based optimization approach. The objective is to identify tradeoff solutions that simultaneously minimize economic costs and environmental impacts, expressed in terms of emissions.
+
+\chapter*{Resumen}
+\addcontentsline{toc}{chapter}{Resumen}
+\noindent Esta tesis desarrolla y valida una prueba de concepto de una microrred multienergética diseñada para permitir el intercambio local de energía térmica y eléctrica dentro de un sistema residencial a escala de barrio. La arquitectura propuesta integra múltiples fuentes de energía renovables, tales como paneles fotovoltaicos, colectores solares térmicos y bombas de calor, junto con sistemas de almacenamiento energético, tanto en baterías como térmico, comparándola con sistemas convencionales basados en calderas de gas y eléctricas.
+
+El proyecto se centra, en una primera fase, en el desarrollo de un marco integral de modelado y simulación que permita representar el comportamiento y las interacciones del sistema energético integrado a nivel de barrio. Este marco recoge la dinámica de generación, almacenamiento y consumo energético, posibilitando la evaluación del rendimiento del sistema bajo condiciones variables. Las simulaciones a nivel de sistema se emplean para validar la metodología propuesta y demostrar la viabilidad del uso de energía renovable producida localmente dentro de una red energética de barrio, contribuyendo así a la transición hacia comunidades energéticas descentralizadas y sostenibles.
+
+A partir de esta base, la tesis aborda posteriormente el dimensionamiento óptimo de los componentes del sistema mediante un enfoque de optimización basado en algoritmos genéticos, con el objetivo de identificar soluciones de compromiso que minimicen simultáneamente los costes económicos y el impacto ambiental, expresado en términos de emisiones.
+
+\chapter*{Resum}
+\addcontentsline{toc}{chapter}{Resum}
+\noindent Aquesta tesi desenvolupa i valida una prova de concepte d'una microxarxa multienergètica dissenyada per permetre l'intercanvi local d'energia tèrmica i elèctrica dins d'un sistema residencial a escala de barri. L'arquitectura proposada integra múltiples fonts d'energia renovable, tals com plaques fotovoltaiques, captadors solars tèrmics i bombes de calor, juntament amb sistemes d'emmagatzematge energètic, tant en bateries com tèrmic, i la compara amb sistemes convencionals basats en calderes de gas i elèctriques.
+
+El projecte se centra, en una primera fase, en el desenvolupament d'un marc integral de modelització i simulació que permeti representar el comportament i les interaccions del sistema energètic integrat a nivell de barri. Aquest marc recull la dinàmica de generació, emmagatzematge i consum energètic, i possibilita l'avaluació del rendiment del sistema sota condicions variables. Les simulacions a nivell de sistema s'empren per validar la metodologia proposada i demostrar la viabilitat de l'ús d'energia renovable produïda localment dins d'una xarxa energètica de barri, contribuint així a la transició cap a comunitats energètiques descentralitzades i sostenibles.
+
+A partir d'aquesta base, la tesi aborda posteriorment el dimensionament òptim dels components del sistema mitjançant un enfocament d'optimització basat en algorismes genètics, amb l'objectiu d'identificar solucions de compromís que minimitzin simultàniament els costos econòmics i l'impacte ambiental, expressat en termes d'emissions.
+
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+\noindent The author would like to express sincere gratitude to Supervisor Professor Berk Celik from Université de Technologie de Compiègne for his continuous guidance, insightful feedback, and for making this research project possible. His support and expertise have played a central role in shaping both the direction and quality of this work.
+
+The author also gratefully acknowledges Co-Supervisor Professor Christian Miquel Mata from Universitat Politècnica de Catalunya for his thoughtful guidance and consistent support throughout the development of this thesis.
+
+Special thanks are extended to Paolo D’Angelo from Université de Technologie de Compiègne for his technical advice and valuable discussions, which have contributed significantly to the rigor of this research.
+
+The author further thanks Laboratoire AVENUES at Université de Technologie de Compiègne, particularly Professor Fabrice Locment and Professor Manuela Sechilariu, for providing a welcoming and stimulating research environment in which this work could be carried out.
+
+The author would like to express sincere appreciation to the EMSSE programme, with particular gratitude to the organizational committee, including Dritan Nace, Simona Sacone, Roberto Sacile, Elinda Kajo Me\c{c}e, Edmundo Paradas Guerra, and Raul Benitez Iglesias, whose dedication and coordination made this academic journey both possible and enriching. Beyond its academic dimension, the programme has been defined by the people encountered along the way. The author is especially grateful to Pedro, Paco, Emi, Bo\u{g}a\c{c}, Dani, Fatjon, Sebas, Ben, Maxime, Paula, Lia, Sandra, Marko, and Thais, who have become an essential part of this experience and whose friendship has made these years truly special and memorable.
+
+The author would also like to thank all friends who have accompanied this path, offering support, perspective, and moments of joy that have made the process both manageable and meaningful.
+
+Deep gratitude is extended to the author’s parents, Lydia and Robert Dapont, as well as Günther Moser and Katja Berkel, for their constant support, encouragement, and trust throughout this journey. Their presence has been a steady source of motivation and reassurance.
+
+\newpage
+\tableofcontents
+
+\chapter{Preface}
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\section{Overview}
+
+\subsection{Current Energy System Challenges}
+
+Energy systems worldwide encounter severe difficulties. Climate change results from greenhouse gas emissions, while an energy crisis arises alongside fossil fuel depletion and supply risks due to geopolitical issues. Demand grows from population increase, transport electrification, regulatory decarbonization policies, and rising comfort needs, which intensify price volatility.
+
+In the European Union, households represent 26\% of final energy consumption, primarily for space and water heating \cite{eurostat_households2023,odyssee_household}. The buildings sector contributes 33\% of energy-related emissions \cite{eea_buildings}. These statistics highlight the need for solutions that target residential energy use to lower consumption, emissions as well as costs effectively.
+
+\subsection{Multi-Energy Microgrids as a Solution}
+
+Multi-energy microgrids address these problems by combining renewable sources like solar panels with conversion devices such as heat pumps, plus storage options including batteries and hot water tanks. They use sophisticated control methods and peer-to-peer trading to manage variations in supply and demand.
+
+Multi-objective optimization plays a key role by addressing costs, environmental effects, energy use efficiency, and grid independence simultaneously. This approach supports the creation of stable and sustainable energy setups that resist price changes and availability issues \cite{eea_buildings,ipcc_buildings}.
+
+\section{Motivation}
+This work reflects a strong desire to protect the environment and support communities with effective energy solutions. These systems reduce emissions, promote renewable energy, lower costs for users, and increase reliability against external disruptions.
+My career has always targeted sustainable energy systems, with this thesis marking the culmination of an academic pathway dedicated to that goal. Studies commenced at technical high school with specialization in Energy and Building Technology, where the diploma project examined ``Planning of an industrial ventilation system and creating an energy concept for waste heat utilization.” The Bachelor of Science in Environmental, Process, and Energy Engineering included a thesis on ``Comparison of heat storage systems with and without phase change material and integration of a groundwater heat pump.” The Master in Sustainable Systems Engineering built upon this foundation, complemented by several internships and projects in closely related fields.
+
+\section{Scope and Goals}
+This thesis focuses on the development, modeling, and optimization of a neighborhood-scale multi-energy microgrid system designed to facilitate the local exchange of thermal and electrical energy. The scope of the work is limited to residential applications and considers a set of representative technologies, including photovoltaic systems, solar thermal collectors, heat pumps, battery energy storage systems, thermal energy storage, and conventional backup technologies such as gas and electric boilers.
+
+The primary goal of this research is to establish a robust modeling and simulation framework capable of accurately representing the dynamic interactions between multiple energy carriers and system components at the neighborhood level. This includes the formulation of energy balance equations, component-level performance models, and time-resolved simulation of energy flows over an annual horizon. The framework is implemented in Python and is structured to support extensibility and reproducibility.
+
+Building on the simulation environment, the thesis further aims to investigate the optimal sizing of system components through the application of a multi-objective optimization approach based on genetic algorithms, specifically the NSGA-II method. The optimization problem is formulated to simultaneously minimize total system cost and environmental impact, expressed in terms of greenhouse gas emissions, thereby identifying trade-off solutions and Pareto-optimal system configurations.
+
+The work does not address real-time control strategies, market mechanisms, or detailed electrical grid constraints, focusing instead on system-level design and long-term performance assessment. Additionally, the analysis is conducted under predefined demand profiles and climatic conditions, without incorporating uncertainty quantification or stochastic modeling.
+
+Overall, this thesis seeks to contribute to the understanding of integrated energy systems at the neighborhood scale and to support the design of decentralized, sustainable energy communities through systematic modeling and optimization.
+
+\section{Project Planning and Timeline}
+In Figure \ref{fig:gantt}, a Gantt chart summarizes the temporal organization of the Master thesis project. During the first project month, corresponding to March, the author carried out an extensive literature review in order to consolidate the theoretical background on multi-energy microgrids. This knowledge base was subsequently used to prepare the conference paper \cite{Mose2606:Multi}, entitled ``Multi-Energy Microgrids: Components, Objectives, and Optimization Methods", which was presented in Tirana, Albania, at the 2026 International Congress on Smart Agriculture and Sustainable Systems Engineering (SmartAgri\&SuSY)''. In parallel with, and following, the paper preparation, the multi-energy microgrid system was modeled in Python to perform simulations and optimizations. The remaining project period was devoted to the drafting and refinement of the Master thesis manuscript, with submission in August and the subsequent defense scheduled for September.
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{gantt_chart.pdf}
+  \caption{Gantt chart of Master thesis project}
+  \label{fig:gantt}
+\end{figure}
+
+
+\chapter{Theoretical Framework}
+
+\section{System Structure}
+\label{sec:System Structure}
+
+This section presents the multi-energy microgrid network with an emphasis on residential neighborhoods. It first introduces the general concept of multi-energy microgrids and their relationship to the energy hub paradigm, then a system-level explanation, followed by physical and technological components. 
+
+\subsection{Microgrid for multi-energy system}
+Multi-energy microgrids can be defined as localized, small- to medium-scale energy systems that simultaneously manage multiple energy carriers, typically electricity, heating, as well as cooling and gas, to serve the demands of a bounded group of users such as a building, neighborhood, or cluster of end-users in residential, commercial, industrial, agricultural, and transportation sectors\cite{orehounig2015decentralized}. In contrast to conventional either electric or thermal microgrids, these multi-energy systems exploit sector coupling through conversion technologies. Because of these transformation methods an improvement in efficiency, reliability, and sustainability of the whole system can be achieved\cite{rajendransasidhar2025multienergy}.
+
+The energy hub concept provides a convenient modeling abstraction for such multi-energy microgrids by representing them as networks of interconnected hubs\cite{mokaramian2025energyhubs,karimi2025triLayer}. They link multiple inputs (e.g. electricity, gas, ambient or geothermal heat) to multiple outputs (e.g. electric loads, space heating, domestic hot water) via conversion and storage technologies, as depicted in the scheme of a district multi-energy system in Fig. \ref{fig:DMES}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{DistrictMES.png}
+    \caption{Representative scheme of district multi-energy system \cite{Xu2024District}.}
+    \label{fig:DMES}
+\end{figure}
+
+
+This view aligns the physical architecture of multi-energy microgrids with a unified mathematical representation, and thereby establishes the basis for the component classification, objective formulation, and optimization strategies discussed in the subsequent subsections.
+
+
+\subsection{Components}
+
+Multi-energy microgrids and energy hubs comprise a portfolio of generation, conversion, storage, and demand-side components that are integrated to meet electricity, heating, cooling, and gas demands effectively \cite{Zhang2026LowCarbon}. In practical designs, the selection and sizing of these components are inherently context-dependent, reflecting local climate conditions, resource availability, demand characteristics, and regulatory frameworks. These choices must be justified through consistent techno-economic and environmental performance metrics at the level of the integrated multi-energy system \cite{orehounig2015decentralized}. The main components of a multi-energy microgrid can be grouped into five elements:
+
+\subsubsection{Renewable production plants}
+
+These technologies function as the primary drivers of sustainable operation in modern energy hubs by managing renewable sources, such as solar and wind energy, to reduce reliance on conventional resources \cite{alhijazi2023hybrid, xu2024optimizing}:
+
+\begin{itemize}
+    \item \textbf{PV systems}: PV panels convert solar irradiance into direct-current electricity using semiconductor materials, typically interfaced through inverters to the microgrid AC bus. 
+    %In multi-energy microgrids, they supply local electrical loads, charge batteries, and feed power-to-heat or power-to-gas technologies, with surplus generation often redirected to thermal storage or flexible loads to limit curtailment.
+    \item \textbf{Solar thermal collectors}: Solar collectors harvest solar energy as heat, typically using flat-plate or evacuated tube absorbers to transfer thermal energy to a fluid circulation system. They are used to supply heat in form of domestic hot water, high-temperature steam, or to provide district heating.
+    %They are usually coupled to thermal energy storage and heating networks, reducing boiler or Combined Heat and Power (CHP) fuel consumption by preheating water or supplying low-temperature space heating and domestic hot water.
+    % \item \textbf{PVT systems}: Combine PV modules with thermal collectors to simultaneously generate electricity and useful thermal energy from solar radiation. These systems cool the PV panels to improve electrical efficiency while capturing waste heat for thermal loads, thereby enhancing overall system performance in multi-energy microgrids.
+    \item \textbf{Wind turbines}: They extract kinetic energy from the wind via rotor blades, a drive train, and an electric generator, delivering variable AC power as a function of wind speed. 
+    %Within the microgrid, they are coordinated with PV and storage to smooth net renewable output, and their inherent uncertainty is explicitly modelled in scheduling and planning studies.
+    \item \textbf{Biomass-based generation units}: They provide dispatchable renewable power by converting solid biofuels and organic residues into useful electricity and heat through technologies such as combustion boilers, anaerobic digestion, and gasification, thereby reducing lifecycle greenhouse gas emissions. 
+    %Wooden products act as primary fuels supplied to dedicated biomass boilers or to biomass-fuelled CHP plants, where chemical energy is transformed into electricity and heat
+\end{itemize}
+
+\subsubsection{Cogeneration and coupling units}
+These technologies serve as the backbone for cross-sector energy conversion, allowing for the flexible management of multiple energy carriers through advanced dispatch strategies \cite{abbasianhamedani2026minireview}:
+
+\begin{itemize}
+    \item \textbf{Combined heat and power units}: CHP units co-generate electricity and heat using prime movers such as internal combustion engines, micro-gas turbines, and organic Rankine cycles which act as key coupling components between electric and thermal networks, with dispatch decisions balancing electric and heat demands.
+    \item \textbf{Electric boilers}: They convert electric energy directly into heat through resistive or electrode heating, offering high efficiency when supplied by low-carbon electricity.
+    \item \textbf{Heat pumps}:They provide useful temperature levels from the upgrade of environmental or ground heat, using vapor-compression cycles, driven by electricity. They enables power-to-heat operation that increases renewable utilization at the cost of higher electric demand.
+    %list types of sources 
+    \item \textbf{Absorption chillers}: They harness heat, typically from CHP units or boilers, as the driving energy to produce cooling via refrigeration cycles. By combining heating and cooling together, they further optimize CHP through the conversion of excess heat into cooling.
+    \item \textbf{Fuel cells}: They convert the chemical energy of hydrogen or natural gas into electricity and heat through electrochemical reactions. In multi-energy microgrids, they interact with electrolyzer and hydrogen storage systems, enabling power-to-gas cycles where surplus renewable electricity is stored chemically and later reconverted.
+\end{itemize}
+
+\subsubsection{Conventional units}
+These technologies are dispatchable thermal or electric sources that remain essential for system reliability and backup power in traditional configurations, at a higher CO$_2$ cost \cite{setlhaolo2017residential}:
+
+\begin{itemize}
+    \item \textbf{Gas and oil boilers}: They use fossil energy carriers to meet heating demands across different scales, and operate as baseline equipment or as backup units for energy systems.
+    \item \textbf{Diesel generators}: They supply dispatchable electric power during peak demand periods or as emergency backup when renewable sources and grid imports are insufficient.
+\end{itemize}
+
+\subsubsection{Energy storage systems}  
+Energy storage technologies play a central role in decoupling energy generation from consumption, thereby enhancing the integration of renewable energy sources \cite{Xu2024District, Rahman2020Assessment}. These technologies can be classified according to their storage principles as follows:
+
+\begin{itemize}
+
+\item \textbf{Electrochemical storage}:  
+Electrochemical storage, such as battery energy storage system (BESS), stores renewable or conventional electric energy through reversible electrochemical reactions. BESS provides short- to medium-term flexibility, supports island operation, and enables temporal arbitrage between periods of low and high electricity prices.
+In energy system models, they are typically represented using state-of-charge dynamics, power limits, and degradation-aware constraints.
+
+\item \textbf{Thermal storage}:  
+Thermal energy storage system (TESS) stores heat or cold in sensible, latent, or thermochemical forms. These technologies are commonly used for space heating, domestic hot water or high-temperature heat for industry applications. Typical implementations include hot water tanks, phase-change materials, and building thermal mass, allowing renewable surplus or low-cost energy to be shifted to periods of higher demand. 
+In parallel, ice storage systems store cooling energy by freezing a medium during periods of low electricity prices or high renewable generation and release it later by melting. Together, TESS and ISC decouple thermal and cooling demand from energy supply, improving operational efficiency and reducing reliance on electrochemical storage.
+
+\item \textbf{Chemical storage}:  
+Hydrogen and gas-based storage systems store energy in chemical carriers such as hydrogen, synthetic fuels, natural gas, or biogas over extended time horizons. Hydrogen storage is typically coupled with power-to-gas processes, enabling long-term and seasonal energy shifting as well as sector coupling through fuel cells and gas-based generation. 
+Gas storage tanks buffer natural gas or biogas, support flexible operation of CHP units, gas turbines, and boilers, and contribute to fuel supply security and optimized dispatch over extended time horizons.
+
+\item \textbf{Mechanical storage}:  
+Mechanical storage, such as compressed air energy storage (CAES) systems, stores electric energy by compressing air and later converting it back to electricity through expansion in turbines. In advanced configurations, such as solar-assisted CAES, thermal energy inputs are integrated into the process, enabling interaction between electric and thermal subsystems and improving overall system performance.
+
+\end{itemize}
+
+\subsubsection{Flexible loads, prosumers, and networks}
+
+This category encompasses electric, thermal, cooling, and gas networks, alongside diverse demand profiles and flexibility assets such as Electric Vehicles (EVs). The physical infrastructure of these networks facilitates the distribution and management of diverse energy vectors, which are essential for balancing the varying requirements of interconnected loads and flexible energy assets:
+
+\begin{itemize}
+    \item \textbf{Network architecture}: It includes the integrated distribution channels that transport electricity, heat, cooling, and natural gas throughout a system. These networks act as the physical backbone, linking supply components to specific load points while maintaining quality and stability.
+    \item \textbf{Energy demand profiles}: They categorize loads based on their specific sectoral needs. Residential demands typically include space heating, domestic hot water, and household appliances, while commercial and industrial demands often include significant cooling loads, high-temperature process heat, and intensive electric requirements. 
+    These profiles are highly sensitive to usage patterns, climate, and occupancy, necessitating robust forecasting methods for optimal dispatch. 
+   \item \textbf{Demand flexibility}: Refers to the capacity to adjust the timing and magnitude of energy consumption to provide grid services such as peak shaving and frequency regulation. EV significantly enhance this flexibility through Vehicle-to-Grid (V2G) and Grid-to-Vehicle (G2V) capabilities: they can charge at times when renewable energy generation is abundant and load is low, effectively mitigating curtailment, and they can also function as distributed energy storage assets to discharge electricity back into the grid during periods of high demand or low renewable output.
+\end{itemize}
+
+\subsection{Optimization Methods}
+The research literature presents a wide range of approaches. The studies differs in: component selection; temporal scope from hourly operation to lifecycle analysis; application contexts spanning residential to industrial systems. The optimization methods usually used for energy system analysis could be based on: mathematical programming, such as MILP, MINLP; exhaustive search; metaheuristic approach such as genetic algorithm and particle swarm optimization algorithm. 
+
+\subsubsection{Mixed integer linear programming (MILP)} is a widely used mathematical optimization frameworks that handle problems involving both continuous and discrete decision variables, when system behavior can be represented by linear constraints. It is an efficient solvers to handle large scale design and operation problems with binary investment and scheduling variables \cite{dangelo2025technoeconomic,Godlonton2024Synthesis}.
+
+\subsubsection{Mixed integer nonlinear programming (MINLP)} expands the formulation of MILP to cover nonlinear interactions, but requiring a higher computational complexity. It is adopted when detailed device physics or nonlinear performance curves must be represented, for instance for combined heat and power (CHP) units, heat pumps, or storage dynamics, so that the model captures more realistic operating behavior at the expense of higher computational complexity \cite{geramimoghaddam2016comprehensive}.
+
+\subsubsection{Discrete exhaustive optimization} is applied when the set of candidate capacities or configurations is limited and quantized, which permits an explicit enumeration of design options and a transparent comparison of alternatives, often in combination with scenario based forecasts for demand or prices \cite{dangelo2025modelling}.
+
+\subsubsection{Metaheuristic optimization}
+Metaheuristic optimization methods are employed to address complex, nonlinear, and high-dimensional energy system problems, with genetic algorithms and particle swarm optimization being among the most widely applied approaches.
+
+\begin{itemize}
+\item \textbf{Genetic algorithm} is a population-based metaheuristic inspired by the principles of natural selection and evolution. It is particularly suitable for energy system optimization problems involving multiple conflicting objectives, complex component interdependencies, and large or combinatorial design spaces. It handles nonlinear and discontinuous search spaces \cite{Mousavi2022MultiobjectiveSO, AghaKassab2024}.
+
+\item \textbf{Particle swarm optimization} is a population-based metaheuristic derived from the collective behavior of animal swarms. In this approach, each candidate solution, referred to as a particle, updates its position in the search space based on its own best-known solution and the global best solution identified by the swarm. This mechanism enables efficient exploration of highly nonlinear and nonconvex search spaces\cite{abbasianhamedani2026minireview}.
+\end{itemize}
+
+\textbf{Stochastic programming} is introduced when renewable generation, demand, or market conditions are uncertain, which allows the optimization to hedge against variability by considering multiple scenarios and by embedding risk measures such as conditional value at risk in the objective function \cite{hemmati2019stochastic,Cao2025Secure}.
+
+%\textbf{Multi objective mathematical programming} combines two or more criteria, such as cost with exergy or emissions, to generate Pareto fronts that support transparent trade off analysis for decision makers in planning and operation contexts, and is often implemented in environments such as the General Algebraic Modeling System (GAMS) \cite{disomma2017multobjective,tonellato2021optimaldesign,karimi2025triLayer,xu2018designoptimization}.
+
+\subsection{Optimization objectives}
+Optimization objectives serve as the criteria by which the performances of the multi-energy system are evaluated and lead the decision-making process to the best design and operational setup. Depending on which criteria needs to be evaluated, the framework can support single-objective analysis as well as multi-objective analysis, i.e. it can allow a single indicator to be optimized in isolation or different competing objectives to be considered simultaneously. Here, the objective functions are designed to reflect the main  aspects of the system.
+
+\subsubsection{Economic objectives}
+The economic objectives aim to minimize the design and management cost of the multi-energy system throughout the considered time horizon.
+Several papers pursue economic objectives such as lifecycle cost, operational cost, planning cost, or profit maximization. In \cite{dangelo2025technoeconomic}, MILP co optimizes investment and operation of photovoltaic, battery, and thermal storage in an industrial multi energy microgrid to minimize long term techno economic cost. %In \cite{tonellato2021optimaldesign}, a multi objective MILP compares exergy based and energy based formulations for residential building energy hub design and operation, generating Pareto fronts between cost and thermodynamic indicators. (excluded to not write same reference in multiple subsubsections of objectives)
+MINLP is employed in \cite{geramimoghaddam2016comprehensive}, where a 24 hour self scheduling model for a building energy hub with CHP, electric heat pump, auxiliary boiler, absorption chiller, and storage maximizes daily profit while satisfying electrical, heating, and cooling demands.
+Discrete exhaustive optimization is used in \cite{dangelo2025modelling} for the development of the energy management of an industrial microgrid with photovoltaic generation, battery storage, power to heat thermal storage, and a gas boiler. Here the discrete operation of the microgrid devices helps to evaluate the minimum operational cost and greenhouse gas emissions over a year simulation, among all the applicable strategies based on the boundary conditions.
+
+%A tri layer multi objective framework implemented in GAMS is introduced in \cite{karimi2025triLayer} for a water energy nexus microgrid comprising electrical, heating, cooling, and water subsystems, where one of the main objectives is to minimize operating costs while coordinating investment, scheduling, and network power flow. (excluded to not write same reference in multiple subsubsections of objectives)
+In \cite{batic2016combined}, linear programming within an energy hub with demand side management minimizes operational costs and peak power demand in a commercial building complex with photovoltaic generation and boilers. Stochastic programming is applied in \cite{hemmati2019stochastic} to an off grid renewable energy hub for autonomous buildings that includes photovoltaic panels, wind turbines, battery storage, and possibly hydrogen storage, where the optimization minimizes investment and expected operational costs under uncertainty in renewable resources and load. In \cite{xu2018designoptimization}, hybrid renewable energy sources integrated within an energy hub for sustainable building development are optimized through a deterministic multi objective model that minimizes total or lifecycle cost while satisfying reliability and comfort constraints. %excluding the stochastic programming one again?
+%In \cite{setlhaolo2017residential}, a mixed integer model for a residential energy hub with CHP, gas boiler, photovoltaic generation, and a heat pump water heater minimizes daily operational cost under time differentiated tariffs.
+%In \cite{Godlonton2024Synthesis}, process synthesis optimization selects polygeneration and renewable supply chain configurations so that the agricultural energy network achieves favorable economic performance. 
+
+
+\subsubsection{CO$_2$ emission objectives}
+
+CO$_2$ emissions represent a key environmental focus in several studies, often formulated alongside economic objectives. In \cite{tonellato2021optimaldesign}, a multi objective MILP includes CO$_2$ emissions together with cost and exergy based metrics for residential building energy hubs, and the resulting Pareto fronts quantify how higher shares of heat pumps and solar technologies reduce emissions under different grid emission factors. %In \cite{karimi2025triLayer}, the tri objective water energy nexus formulation implemented in GAMS minimizes greenhouse gas emissions together with operating costs and grid dependence, so that decision makers can select solutions that achieve emission reductions with acceptable economic performance. (excluded to not write same reference in multiple subsubsections of objectives)
+
+\subsubsection{Exergy and primary energy objectives}
+
+Exergy expresses the maximum useful work that can be obtained from an energy stream as it comes into equilibrium with its environment, whereas primary energy quantifies the energy content of fuels or renewable resources before conversion and delivery to end uses. In \cite{disomma2017multobjective}, a multi objective optimization problem minimizes total annual primary exergy input and annualized cost for distributed energy systems, and the two objective functions jointly quantify monetary expenditure and thermodynamic resource consumption. In \cite{kalina2024technical}, a multicarrier building energy hub featuring high temperature heat pumps, on site waste heat recovery, storage, and on site electricity generation is assessed through energy utilization factors and exergy efficiencies combined with simple economic indicators such as payback period, and this evaluation links exergy and primary energy performance to investment decisions. %In \cite{tonellato2021optimaldesign}, multi objective MILP minimizes exergy input and primary energy use alongside cost for alternative building energy hub configurations, and the generated Pareto fronts show how different equipment portfolios influence upstream resource use and local exergy destruction. (excluded to not write same reference in multiple subsubsections of objectives)
+
+%\subsubsection{Sizing objectives}
+
+%Sizing optimization supports consistent design decisions when establishing or renovating a multi energy microgrid. In \cite{disomma2017multobjective}, \cite{dangelo2025modelling}, \cite{dangelo2025technoeconomic}, and \cite{tonellato2021optimaldesign} the capacities of key components such as CHP units, boilers, photovoltaic plants, batteries, and thermal storage are treated as decision variables that are optimized jointly with the operational schedules. These works show that appropriate sizing is essential because oversizing increases capital expenditure and can lead to poor asset utilization, while undersizing can raise operating costs, reduce reliability, and limit achievable reductions in exergy use and primary energy demand. Within the framework of multi energy microgrids, capacity optimization is therefore a fundamental task, since it links performance targets and cost efficiency for both new systems and deep energy retrofits.
+%comment Paolo: papers of this paragraph should already be present in other objectives since sizing of the components is a result of optimizing other objectives
+
+\subsubsection{Autarky objectives}
+High energy autarky is pursued to reduce dependence on external energy supplies, limit exposure to price volatility, and decrease emissions associated with carbon intensive grid electricity. In \cite{karimi2025triLayer}, the upstream grid independency factor index (UGIFI) is maximized within a multi energy microgrid that couples electrical, heating, cooling, and water subsystems, and the tri layer multi objective optimization balances the desire for greater self sufficiency against increases in cost or emissions by coordinating local generation and storage investments with network level constraints.
+
+\subsubsection{Reliability objectives}
+High reliability ensures secure and continuous energy supply despite uncertainties in demand, generation, and system operation. In \cite{FARAJI2021102578}, stochastic optimization schedules an energy hub by coordinating distributed energy resources, storage systems, and demand response under renewable uncertainties and equipment failures, using two-stage stochastic programming with scenario-based modeling to minimize operational costs and energy not supplied. 
+
+\chapter{Methodology}
+\section{Demand Modeling}
+\label{sec:demand_modelling}
+
+\subsection{Electricity Demand}
+\label{subsec:electric_demand}
+
+The residential electricity demand profile is derived from the EtudELEC dataset, which aggregates measured consumption from more than 400 French households for the years 2022 and 2023 \cite{osonuga_etudelec_2024}. The hourly time series in the column labeled \texttt{Mean} is interpreted as the typical household demand, because the arithmetic mean reflects the aggregate energy requirement when scaling up from one household to a larger neighborhood, whereas the median would intentionally downplay high-consumption households and would therefore be more suitable only for a single representative dwelling \cite{osonuga_etudelec_2024}.  
+
+In the current framework, the simulation is performed over the full available yearly time series, and the annual electricity demand is obtained by direct aggregation of the hourly values, resulting in a total of \(6215~\mathrm{kWh}\) for the considered household. In order to construct a full‑year electricity demand profile from the EtudELEC data, which natively spans from 25 October 2022 to 30 September 2023, the missing 24 days were systematically filled by duplicating the subsequence from 1 September 2023 to 24 September 2023, thereby avoiding artificial discontinuities and preserving the temporal statistics of the original dataset. The corresponding representative daily electricity demand profiles for four characteristic days of each season are shown in Figure~\ref{fig:elec_demand_profiles} in order to illustrate seasonal differences in the load pattern.  
+
+\begin{figure}[H]
+\centering
+\caption{Representative daily electricity demand profiles for the selected French households}
+\label{fig:elec_demand_profiles}
+
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{electricity_consumption_graph_15_04_2023.pdf}
+\caption{Spring}
+\label{fig:elec_spring}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{electricity_consumption_graph_15_07_2023.pdf}
+\caption{Summer}
+\label{fig:elec_summer}
+\end{subfigure}
+
+\vspace{0.5em}
+
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{electricity_consumption_graph_25_10_2022.pdf}
+\caption{Autumn}
+\label{fig:elec_autumn}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{electricity_consumption_graph_15_01_2023.pdf}
+\caption{Winter}
+\label{fig:elec_winter}
+\end{subfigure}
+\end{figure}
+
+
+\subsection{Thermal Demand}
+\label{subsec:thermal_demand}
+
+The thermal demand profile is constructed using the When2Heat dataset, which provides hourly heating demand and heat pump coefficient of performance (COP) time series for several residential building types in 28 European countries over the period 2008 to 2015 \cite{ruhnau_when2heat_2019}. France is selected as the reference country in order to maintain consistency with the electricity demand data and to represent a typical Western European climate.  
+
+The total thermal load is computed by summing the space heating and domestic hot water (DHW) components as
+\begin{equation}
+P_{\mathrm{th,dem}}(t) = P_{\mathrm{SH}}(t) + P_{\mathrm{DHW}}(t),
+\label{eq:thermal_demand_definition}
+\end{equation}
+where \(P_{\mathrm{SH}}(t)\) denotes space heating demand and \(P_{\mathrm{DHW}}(t)\) denotes DHW demand. The simulation evaluates the full yearly thermal demand time series and aggregates the hourly values to obtain the annual thermal demand, which equals \(19069~\mathrm{kWh}\) for the modeled household. To highlight seasonal variations in the thermal load, Figure~\ref{fig:thermal_demand_profiles} presents the daily profiles for four representative days chosen in the middle of each meteorological season.  
+
+\begin{figure}[H]
+\centering
+\caption{Representative daily thermal demand profiles (space heating + DHW) for France}
+\label{fig:thermal_demand_profiles}
+
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{heat_demand_graph_FR_15_04_2015.pdf}
+\caption{Spring}
+\label{fig:heat_spring}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{heat_demand_graph_FR_15_07_2015.pdf}
+\caption{Summer}
+\label{fig:heat_summer}
+\end{subfigure}
+
+\vspace{0.5em}
+
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{heat_demand_graph_FR_15_10_2015.pdf}
+\caption{Autumn}
+\label{fig:heat_autumn}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{heat_demand_graph_FR_15_01_2015.pdf}
+\caption{Winter}
+\label{fig:heat_winter}
+\end{subfigure}
+\end{figure}
+
+\subsection{Demand Upscaling }
+\label{subsec:demand_upscaling}
+\subsubsection{From a Single-Family Household to a Residential Neighborhood}
+The electrical and thermal demand profiles used as simulation inputs are
+described in Sections~\ref{subsec:electric_demand}
+and~\ref{subsec:thermal_demand}, respectively.
+To represent a residential neighborhood of $N$ households, an upscaling
+procedure is applied that combines two sources of inter-household demand
+diversity: a stochastic amplitude scaling drawn from a log-normal
+distribution, and a stochastic temporal shift drawn from a discrete uniform
+distribution.
+Both transformations are applied independently to the electrical and thermal
+series.
+
+% -------------------------------------------------------
+\subsubsection{Limitations of Simple Linear Scaling}
+\label{subsubsec:limitations_linear}
+
+A naive approach to neighborhood upscaling would multiply the
+single-household demand at every timestep by the number of households $N$.
+This procedure implicitly assumes perfect temporal and magnitude correlation
+between all households, meaning every occupant consumes energy at exactly the
+same time and in exactly the same proportion as the reference household.
+Such an assumption ignores the statistical independence of occupancy
+schedules, appliance usage patterns, and thermal comfort behaviors across
+dwellings~\cite{dickert2010coincidence}, and produces a systematic
+overestimation of the aggregate peak demand.
+Neglecting the diversity of both consumption levels and peak timing leads to
+oversizing of storage components and grid connection capacity, with direct
+consequences for the cost and emissions results produced by the simulation.
+
+% -------------------------------------------------------
+\subsubsection{Stochastic Aggregation via Seeded Monte Carlo Sampling}
+\label{subsubsec:monte_carlo}
+
+To introduce physically realistic inter-household demand diversity, two
+independent stochastic transformations are applied to the base
+single-household profile for each of the $N$ simulated households.
+
+\paragraph{Amplitude scaling.}
+Per-household amplitude scaling factors $s_i$ are drawn from a log-normal
+distribution.
+The log-normal model is well supported in the literature for annual household
+energy consumption~\cite{vtt2015lognormal, vtt2018hierarchical}.
+Empirical studies of electricity consumption show that the cross-household
+distribution is right-skewed and well approximated by a log-normal form,
+with annual coefficients of variation typically in the range of 0.18 to
+0.25~\cite{vtt2018hierarchical}.
+For thermal demand, inter-household variability is governed primarily by
+building envelope characteristics (insulation quality, glazing ratio,
+orientation) and occupant behavior, both of which vary substantially across
+a residential stock~\cite{vandenbrom2019variances}; reported coefficients of
+variation range from 0.25 to 0.40~\cite{vandenbrom2019variances}.
+
+For $N$ households, $N$ independent scaling factors $s_i$ are drawn such
+that:
+%
+\begin{equation}
+    s_i \sim \mathrm{LogNormal}\!\left(\mu_{\ln},\,\sigma_{\ln}\right),
+    \quad
+    \mu_{\ln} = -\tfrac{1}{2}\sigma_{\ln}^{2}
+    \label{eq:lognormal}
+\end{equation}
+%
+where the shift $\mu_{\ln} = -\tfrac{1}{2}\sigma_{\ln}^{2}$ ensures that
+$\mathbb{E}[s_i] = 1$, so the expected aggregate demand remains equal to
+$N$ times the base profile.
+
+\paragraph{Temporal shift.}
+Beyond amplitude variability, each household's load curve is circularly
+shifted in time by an independent integer offset $\tau_i$, drawn from a
+discrete uniform distribution:
+%
+\begin{equation}
+    \tau_i \sim \mathcal{U}\!\left\{-h_{\max},\,\ldots,\,h_{\max}\right\}
+    \label{eq:shift}
+\end{equation}
+%
+where $h_{\max}$ is the maximum permitted shift in hours.
+The circular shift preserves the total energy content of each household's
+profile while desynchronizing consumption peaks across the neighborhood.
+This temporal diversification is physically motivated by the observation
+that occupancy start times, meal preparation, and appliance use are not
+synchronized across dwellings even within the same residential
+block~\cite{dickert2010coincidence}.
+
+The instantaneous aggregate demand at timestep $t$ is therefore:
+%
+\begin{equation}
+    D_{\mathrm{agg}}(t)
+    = \sum_{i=1}^{N} s_i \cdot D_{\mathrm{base}}\!\left(t - \tau_i\right)
+    \label{eq:agg_demand}
+\end{equation}
+%
+where $D_{\mathrm{base}}(t - \tau_i)$ denotes the base single-household
+profile circularly shifted by $\tau_i$ hours.
+The combined effect of log-normal amplitude diversity and temporal
+desynchronization attenuates the aggregate peak relative to the linear
+scaling benchmark, in a manner that is statistically consistent with the
+observed cross-household variability in the literature~\cite{dickert2010coincidence, vtt2018hierarchical}.
+
+\paragraph{Reproducibility.}
+Reproducibility is ensured through the use of an isolated pseudo-random
+number generator based on the PCG64 algorithm~\cite{numpy2020rng}.
+The seed is set to $N + \delta$, where $\delta$ is a constant offset that
+differs between the electrical and thermal series
+($\delta_{\mathrm{elec}} = 42$, $\delta_{\mathrm{therm}} = 123$).
+This construction guarantees that any chosen value of $N$ always yields the
+same realization of scaling factors and time shifts across simulation runs,
+while a different value of $N$ produces a distinct but internally stable
+realization.
+The separate offsets ensure that the electrical and thermal random vectors
+are statistically independent, consistent with the physical observation that
+appliance usage and building thermal properties are governed by different
+underlying processes.
+
+% -------------------------------------------------------
+\subsubsection{Parameter Summary}
+\label{subsubsec:param_summary}
+
+Table~\ref{tab:upscaling_params} summarizes all upscaling parameters, their
+symbols, the values adopted in this study, and the supporting references.
+
+\begin{table}[H]
+\centering
+\caption{Demand upscaling parameters for neighborhood-scale simulation.}
+\label{tab:upscaling_params}
+\begin{tabular}{llll}
+\hline
+\textbf{Quantity} & \textbf{Symbol} & \textbf{Value} & \textbf{Source} \\
+\hline
+Log-normal spread, electricity
+    & $\sigma_{\ln,\,\mathrm{elec}}$
+    & 0.20
+    & \cite{vtt2015lognormal,vtt2018hierarchical} \\
+Log-normal spread, thermal
+    & $\sigma_{\ln,\,\mathrm{therm}}$
+    & 0.30
+    & \cite{vandenbrom2019variances} \\
+Max.\ temporal shift, electricity
+    & $h_{\max,\,\mathrm{elec}}$
+    & 2\,h
+    & Implementation choice \\
+Max.\ temporal shift, thermal
+    & $h_{\max,\,\mathrm{therm}}$
+    & 1\,h
+    & Implementation choice \\
+\hline
+\end{tabular}
+\end{table}
+
+
+\section{Components}
+\label{sec:components}
+
+%\begin{figure}[H]
+ %   \centering
+ %   \includegraphics[width=\textwidth]{system_schema.jpg}
+ %   \caption{Schematic drawing of the system}
+ %   \label{fig:system_schema}
+%\end{figure}
+
+\subsection{Utility Grid}
+\label{subsec:utility_grid}
+
+The utility grid supplies electrical energy and can also receive surplus electricity fed back from the neighborhood. The hourly cost of purchasing electricity from the grid is computed as
+\begin{equation}
+C_{\mathrm{UG}}(t) = c_{\mathrm{UG}}^{\mathrm{buy}}\,E_{\mathrm{UG}}^{\mathrm{imp}}(t),
+\label{eq:grid_cost}
+\end{equation}
+while the revenue for exported electricity is
+\begin{equation}
+R_{\mathrm{UG}}(t) = c_{\mathrm{UG}}^{\mathrm{sell}}\,E_{\mathrm{UG}}^{\mathrm{exp}}(t).
+\label{eq:grid_revenue}
+\end{equation}
+Associated operational emissions are modeled as
+\begin{equation}
+E_{\mathrm{UG}}^{\mathrm{CO2}}(t) = \zeta_{\mathrm{CO2,UG}}\,E_{\mathrm{UG}}^{\mathrm{imp}}(t),
+\label{eq:grid_emissions}
+\end{equation}
+where all energies are expressed in \(\mathrm{kWh}\) and \(\zeta_{\mathrm{CO2,UG}}\) denotes the grid emission factor in \(\mathrm{kgCO2eq/kWh}\). The grid emission factor is extracted from the french transmission system operator RTE website as an average value \cite{RTECO2}. The present configuration uses the regulated French residential option BASE tariff, with subscribed delivery-point power of 9 kW and validity from 1 February 2026, as provided in the CRE open-data archive \cite{cre_tariffs_residential_2026}. The electricity purchase price is taken from this tariff dataset, while the feed-in price is obtained from current French regulations \cite{service_public_surplus_2024}.  
+
+In addition to the variable energy purchase cost, the model includes a fixed yearly grid subscription cost. This subscription is scaled by the number of households in the neighborhood and converted to an hourly equivalent using the annualization factor defined in the model configuration.
+
+\begin{table}[H]
+\centering
+\caption{Utility grid parameters}
+\label{tab:utility_grid_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+Electricity purchase price & \(c_{\mathrm{UG}}^{\mathrm{buy}}\) & \(0.19266~\mathrm{\text{\euro}/kWh}\) & \cite{cre_tariffs_residential_2026} \\
+Electricity feed-in price & \(c_{\mathrm{UG}}^{\mathrm{sell}}\) & \(0.08345~\mathrm{\text{\euro}/kWh}\) & \cite{service_public_surplus_2024} \\
+Yearly subscription cost & \(C_{\mathrm{UG}}^{\mathrm{sub}}\) & \(235.9~\mathrm{\text{\euro}/a}\) & \cite{cre_tariffs_residential_2026} \\
+Grid emission factor & \(\zeta_{\mathrm{CO2,UG}}\) & \(0.0285~\mathrm{kgCO2eq/kWh}\) & \cite{RTECO2} \\
+\hline
+\end{tabular}
+\end{table}
+
+
+
+\subsection{Electric Boiler}
+\label{subsec:electric_boiler}
+
+The electric boiler converts electricity into heat with efficiency \(\eta_{\mathrm{EB}}\). For a thermal demand \(Q_{\mathrm{EB}}(t)\) the required electrical energy is
+\begin{equation}
+E_{\mathrm{EB}}^{\mathrm{el}}(t) = \frac{Q_{\mathrm{EB}}(t)}{\eta_{\mathrm{EB}}},
+\label{eq:electric_boiler_power}
+\end{equation}
+and a levelized cost of heat \(\mathrm{LCOH}_{\mathrm{EB}}\) is applied in addition to grid electricity cost:
+\begin{equation}
+C_{\mathrm{EB}}(t) = \mathrm{LCOH}_{\mathrm{EB}}\,Q_{\mathrm{EB}}(t).
+\label{eq:electric_boiler_cost}
+\end{equation}
+Efficiency and cost factors are derived from techno-economic analyses of electric boilers in industrial solar process heat applications \cite{caron_ship4d_2025}.  
+
+\begin{table}[H]
+\centering
+\caption{Electric boiler parameters}
+\label{tab:electric_boiler_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+Efficiency & \(\eta_{\mathrm{EB}}\) & \(0.99\) & \cite{caron_ship4d_2025} \\
+Levelized cost of heat & \(\mathrm{LCOH}_{\mathrm{EB}}\) & \(0.15~\mathrm{\text{\euro}/kWh}\) & \cite{caron_ship4d_2025} \\
+Direct emission factor & \(\zeta_{\mathrm{CO2,EB}}\) & \(0~\mathrm{kgCO2eq/kWh}\) & assumption \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Gas Boiler}
+\label{subsec:gas_boiler}
+
+The gas boiler converts biogas fuel into useful heat. The levelized cost of heat is represented by a constant value \(\mathrm{LCOH}_{\mathrm{GB}}\) in \(\mathrm{\text{\euro}/kWh}\), and the hourly cost is given by
+\begin{equation}
+C_{\mathrm{GB}}(t) = \mathrm{LCOH}_{\mathrm{GB}}\,Q_{\mathrm{GB}}(t),
+\label{eq:gas_boiler_cost}
+\end{equation}
+where \(Q_{\mathrm{GB}}(t)\) denotes the useful heat delivered by the boiler. Emissions are modeled as
+\begin{equation}
+E_{\mathrm{GB}}^{\mathrm{CO2}}(t) = \zeta_{\mathrm{CO2,GB}}\,Q_{\mathrm{GB}}(t).
+\label{eq:gas_boiler_emissions}
+\end{equation}
+Emission factors for biogas in different units are taken from published engineering data \cite{winnipeg_biogas_2012}, and typical lower heating value data are provided in biogas technology fact sheets \cite{f3centre_biogas_2024}.  
+
+\begin{table}[H]
+\centering
+\caption{Gas boiler parameters}
+\label{tab:gas_boiler_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+Levelized cost of heat & \(\mathrm{LCOH}_{\mathrm{GB}}\) & \(0.13~\mathrm{\text{\euro}/kWh}\) & \cite{EC2020_LCOE} \\
+Emission factor & \(\zeta_{\mathrm{CO2,GB}}\) & \(0.02~\mathrm{kgCO2eq/kWh}\) & \cite{winnipeg_biogas_2012} \\
+Representative LHV & \(\mathrm{LHV}_{\mathrm{gas}}\) & \(13.9~\mathrm{kWh/kg}\) & \cite{f3centre_biogas_2024} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Photovoltaic System}
+\label{subsec:pv_system}
+
+The photovoltaic (PV) generator is described by a temperature-dependent efficiency model based on \cite{HE2023113476}. The cell temperature is estimated as
+\begin{equation}
+T_{\mathrm{PV}}(t) = T_{\mathrm{amb}}(t) + \left(T_{\mathrm{nom}} - T_{\mathrm{ref}}\right) \frac{I(t)}{I_{\mathrm{ref}}},
+\label{eq:pv_temperature}
+\end{equation}
+and the instantaneous electrical power output is computed as
+\begin{equation}
+P_{\mathrm{PV}}(t) = P_{\mathrm{PV,peak}}
+\frac{I(t)}{I_{\mathrm{STC}}}
+\left(1 - \beta\left(T_{\mathrm{PV}}(t) - T_{\mathrm{STC}}\right)\right),
+\label{eq:pv_power}
+\end{equation}
+where \(I(t)\) is the global irradiance, \(P_{\mathrm{PV,peak}}\) is the installed peak power, \(I_{\mathrm{STC}}\) and \(T_{\mathrm{STC}}\) denote standard test conditions, and \(\beta\) is the temperature coefficient \cite{HE2023113476}. The hourly PV energy is obtained from \(P_{\mathrm{PV}}(t)\,\Delta t\).  
+
+The peak power is related to the module characteristics by
+\begin{equation}
+P_{\mathrm{PV,peak}} = \rho_{\mathrm{PV}}\,A_{\mathrm{PV}}\,N_{\mathrm{PV}},
+\label{eq:pv_peak_power}
+\end{equation}
+where \(\rho_{\mathrm{PV}}\) is the power density in \(\mathrm{W/m^2}\), \(A_{\mathrm{PV}}\) is the panel area, and \(N_{\mathrm{PV}}\) is the number of panels per household. Parameters \(T_{\mathrm{nom}}\), \(A_{\mathrm{PV}}\), \(\beta\), and \(\rho_{\mathrm{PV}}\) are based on the REC ALPHA\textsuperscript{\textregistered} PURE-RX module datasheet \cite{rec_alpha_pure_rx}.  
+
+The annualized capital expenditure of the PV system is represented via an annual cost per panel. Let \(C_{\mathrm{cap,PV,p}}\) denote the annualized capital cost of one panel, \(C_{\mathrm{inv,PV,p}}\) the initial investment per panel, \(i\) the interest rate, and \(n\) the lifetime in years. The capital recovery factor is
+\begin{equation}
+\mathrm{CRF}(i,n) = \frac{i(1+i)^{n}}{(1+i)^{n}-1},
+\label{eq:crf_definition}
+\end{equation}
+and the annualized cost per panel is
+\begin{equation}
+C_{\mathrm{cap,PV,p}} = C_{\mathrm{inv,PV,p}}\,\mathrm{CRF}(i,n).
+\label{eq:pv_capex_panel}
+\end{equation}
+With the present values
+\begin{equation}
+C_{\mathrm{inv,PV,p}} = 242~\mathrm{\text{\euro}}, \quad i = 0.05, \quad n = 30,
+\label{eq:pv_capex_inputs}
+\end{equation}
+Equation \ref{eq:pv_capex_panel} yields
+\begin{equation}
+C_{\mathrm{cap,PV,p}} = 15.74~\mathrm{\text{\euro}/a},
+\label{eq:pv_capex_numeric}
+\end{equation}
+which is used as input to the simulation. The total annualized PV capital cost is then
+\begin{equation}
+C_{\mathrm{cap,PV}} = C_{\mathrm{cap,PV,p}}\,N_{\mathrm{PV}}.
+\label{eq:pv_capex_total}
+\end{equation}
+A constant O\&M cost per generated kilowatt-hour is assumed, consistent with values reported for building energy hubs in Swiss and Italian case studies \cite{tonellato2021optimaldesign}.  
+The lifecycle operational emission factor (LEOE) assigned to the PV system is set to 27.4 gCO\textsubscript{2}eq/kWh, representing the midrange value of the emission intensity range reported for photovoltaic panels, which spans from 10.8 gCO\textsubscript{2}eq/kWh for the most favorable installations to 44 gCO\textsubscript{2}eq/kWh for the most carbon-intensive configurations \cite{PVCO2}.
+
+\begin{table}[H]
+\centering
+\caption{Photovoltaic system parameters}
+\label{tab:pv_system_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+STC irradiance & \(I_{\mathrm{STC}}\) & \(1000~\mathrm{W/m^2}\) & standard \\
+STC temperature & \(T_{\mathrm{STC}}\) & \(25~^\circ\mathrm{C}\) & standard \\
+Reference irradiance & \(I_{\mathrm{ref}}\) & \(800~\mathrm{W/m^2}\) & \cite{rec_alpha_pure_rx} \\
+Reference temperature & \(T_{\mathrm{ref}}\) & \(20~^\circ\mathrm{C}\) & \cite{rec_alpha_pure_rx} \\
+Nominal module temperature & \(T_{\mathrm{nom}}\) & \(44~^\circ\mathrm{C}\) & \cite{rec_alpha_pure_rx} \\
+Temperature coefficient & \(\beta\) & \(0.0024~\mathrm{K^{-1}}\) & \cite{rec_alpha_pure_rx} \\
+Panel area & \(A_{\mathrm{PV}}\) & \(2.08~\mathrm{m^2}\) & \cite{rec_alpha_pure_rx} \\
+Panels per household & \(N_{\mathrm{PV}}\) & \(10\) & assumption \\
+Power density & \(\rho_{\mathrm{PV}}\) & \(226~\mathrm{W/m^2}\) & \cite{rec_alpha_pure_rx} \\
+Invest. per panel & \(C_{\mathrm{inv,PV,p}}\) & \(242~\mathrm{\text{\euro}}\) & \cite{rec_alpha_pure_rx} \\
+Interest rate & \(i\) & \(0.05\) & assumption \\
+Lifetime & \(n\) & \(30~\mathrm{a}\) & \cite{rec_alpha_pure_rx} \\
+Annualized CAPEX/panel & \(C_{\mathrm{cap,PV,p}}\) & \(15.74~\mathrm{\text{\euro}/a}\) & Eq.~\ref{eq:crf_definition} \\
+O\&M cost & -- & \(0.01~\mathrm{\text{\euro}/kWh}\) & \cite{tonellato2021optimaldesign} \\
+Levelized emissions of energy& \(\mathrm{LEOE}\) & 0.0274~\mathrm{kgCO2eq/kWh} & \cite{PVCO2} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Solar Irradiation and Ambient Temperature Data}
+\label{subsubsec:solar_dataset}
+
+Hourly solar global irradiation and ambient temperature time series for Compi\`egne are obtained using the PVGIS online tool of the European Commission Joint Research Centre \cite{pvgis_sarah3_utc_pg2}. The location \emph{UTC Centre Pierre Guillaumat 2} is selected in the web interface, and the radiation database is set to PVGIS-SARAH3. The tool is configured with a fixed tilt angle (slope) of \(35^\circ\), an azimuth of \(0^\circ\) (south-facing), a nominal PV system power of \(0.5~\mathrm{kWp}\) (crystalline silicon), and total system losses of \(14~\%\).  
+
+From the downloaded PVGIS dataset, the model uses the column \(G(i)\) as the global irradiance input and the column \(T2m\) as the ambient temperature input. In the notation of Equations \ref{eq:pv_temperature} and \ref{eq:pv_power}, this corresponds to
+\begin{equation}
+I(t) = G(i),
+\label{eq:pvgis_irradiance_mapping}
+\end{equation}
+\begin{equation}
+T_{\mathrm{amb}}(t) = T2m.
+\label{eq:pvgis_temperature_mapping}
+\end{equation}
+These time series provide the irradiance \(I(t)\) in \(\mathrm{W/m^2}\) and ambient temperature \(T_{\mathrm{amb}}(t)\) in \({^\circ\mathrm{C}}\) required by the PV model.
+
+
+
+\subsection{Air-Source Heat Pumps}
+\label{subsec:heat_pumps}
+
+Air-source heat pumps are modeled via temperature- and time-dependent COP series extracted from the When2Heat dataset \cite{ruhnau_when2heat_2019}. For a given thermal demand \(Q_{\mathrm{HP}}(t)\) and COP value \(\mathrm{COP}(s,t)\) at season index \(s\) and hour index \(t\), the electrical energy demand is
+\begin{equation}
+E_{\mathrm{HP}}^{\mathrm{el}}(t) = \frac{Q_{\mathrm{HP}}(t)}{\mathrm{COP}(s,t)}.
+\label{eq:heat_pump_power}
+\end{equation}
+A constant levelized cost of heat \(\mathrm{LCOH}_{\mathrm{HP}}\) is applied in analogy to the boiler models:
+\begin{equation}
+C_{\mathrm{HP}}(t) = \mathrm{LCOH}_{\mathrm{HP}}\,Q_{\mathrm{HP}}(t).
+\label{eq:heat_pump_cost}
+\end{equation}
+
+\begin{table}[H]
+\centering
+\caption{Heat pump parameters}
+\label{tab:heat_pump_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+LCOH (air-source) & \(\mathrm{LCOH}_{\mathrm{HP,air}}\) & \(0.135~\mathrm{\text{\euro}/kWh}\) & \cite{EC2020_LCOE} \\
+Direct emission factor & \(\zeta_{\mathrm{CO2,HP}}\) & \(0~\mathrm{kgCO2eq/kWh}\) & assumption \\
+COP time series & \(\mathrm{COP}(s,t)\) & data-driven & \cite{ruhnau_when2heat_2019} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Battery Energy Storage System}
+\label{subsec:bess}
+
+The battery energy storage system (BESS) is modeled via an energy balance with self-discharge and charge/discharge efficiencies \cite{HE2023113476,CRISTEA2022102633,liion_env_impact}. The state of charge \(E_{\mathrm{BES}}(t)\) in \(\mathrm{kWh}\) evolves as
+\begin{equation}
+E_{\mathrm{BES}}(t)
+= E_{\mathrm{BES}}(t-1)\left(1-\sigma_{\mathrm{BES}}\right)
++ E_{\mathrm{BES}}^{\mathrm{in}}(t)
+- E_{\mathrm{BES}}^{\mathrm{out}}(t),
+\label{eq:bess_energy_balance}
+\end{equation}
+with
+\begin{equation}
+E_{\mathrm{BES}}^{\mathrm{in}}(t)=\eta_{\mathrm{BES}}^{\mathrm{char}}\,P_{\mathrm{BES}}^{\mathrm{char}}(t)\,\Delta t,
+\label{eq:bess_input_energy}
+\end{equation}
+\begin{equation}
+E_{\mathrm{BES}}^{\mathrm{out}}(t)=\frac{P_{\mathrm{BES}}^{\mathrm{disc}}(t)}{\eta_{\mathrm{BES}}^{\mathrm{disc}}}\,\Delta t.
+\label{eq:bess_output_energy}
+\end{equation}
+The usable energy capacity is \(E_{\mathrm{BES,cap}}\), and bounds on the state of charge are enforced as
+\begin{equation}
+\mathrm{SOC}_{\mathrm{BES,min}}\,E_{\mathrm{BES,cap}}
+\leq E_{\mathrm{BES}}(t)
+\leq \mathrm{SOC}_{\mathrm{BES,max}}\,E_{\mathrm{BES,cap}}.
+\label{eq:bess_soc_bounds}
+\end{equation}
+End-of-day state of charge is steered towards an initial target SOC to ensure cyclic operation across representative days. The levelized cost of storage (LCOS) and levelized emissions of storage (LEOS) are applied on the discharged electrical energy \cite{CRISTEA2022102633,BESSLEOS}.  
+
+Charge and discharge power limits are derived from the SMA Home Storage HS-BM-3.28 datasheet, from which the nominal voltage, maximum charging and discharging currents, and usable capacity are obtained. The selected battery employs Lithium Iron Phosphate LiFePO$_{4}$ cell technology and features a stackable design, enabling scalability from 3.2 kWh to 16.4 kWh. \cite{sma_home_storage_ds}
+
+%include here that the annualized lifecycle emissions were calculated taking the LEOS*capacity/lifespan, and that it just gets added to the annual calculations like that. WRONG
+
+
+\begin{table}[H]
+\centering
+\caption{Battery energy storage parameters}
+\label{tab:bess_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+Self-discharge rate & \(\sigma_{\mathrm{BES}}\) & \(3\times10^{-5}\) & \cite{DANGELO2026121627} \\
+Charging efficiency & \(\eta_{\mathrm{BES}}^{\mathrm{char}}\) & \(0.945\) & \cite{sma_home_storage_ds} \\
+Discharging efficiency & \(\eta_{\mathrm{BES}}^{\mathrm{disc}}\) & \(0.945\) & \cite{sma_home_storage_ds} \\
+Initial SOC & \(\mathrm{SOC}_{\mathrm{BES,init}}\) & \(0.5\) & assumption \\
+Usable capacity & \(E_{\mathrm{BES,cap}}\) & \(3.28~\mathrm{kWh}\) & \cite{sma_home_storage_ds} \\
+Max. charge/discharge power & \(P_{\mathrm{BES,max}}\) & \(3.456~\mathrm{kW}\) & \cite{sma_home_storage_ds} \\
+Levelized cost of storage & \(\mathrm{LCOS}\) & \(0.456~\mathrm{\text{\euro}/kWh_{d}}\) & \cite{CRISTEA2022102633} \\
+Levelized emissions of storage& \(\mathrm{LEOS}\) & \(0.011~\mathrm{kgCO2eq/kWh_{d}}\) & \cite{BESSLEOS} \\
+%Lifetime & \(n\) & \(10~\mathrm{a}\) & \cite{sma_home_storage_ds} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Thermal Energy Storage System}
+\label{subsec:tess}
+%describe that no direct emissions included due to absence of data from reliable sources. 
+The thermal energy storage (TESS) is modeled as a hot water tank and described by an analogous thermal energy balance with self-discharge and plate heat exchanger efficiency \cite{DANGELO2026121627,solarheateurope_tess}. The stored energy \(Q_{\mathrm{TES}}(t)\) evolves as
+\begin{equation}
+Q_{\mathrm{TES}}(t) = Q_{\mathrm{TES}}(t-1)\left(1-\sigma_{\mathrm{TES}}\right)
++ Q_{\mathrm{TES}}^{\mathrm{in}}(t) - Q_{\mathrm{TES}}^{\mathrm{out}}(t),
+\label{eq:tess_energy_balance}
+\end{equation}
+where the self-discharge term captures heat loss to the surroundings. Thermal input and output are modeled as
+\begin{equation}
+Q_{\mathrm{TES}}^{\mathrm{in}}(t) = Q_{\mathrm{gen}}(t),
+\label{eq:tess_input}
+\end{equation}
+\begin{equation}
+Q_{\mathrm{TES}}^{\mathrm{out}}(t)=\frac{P_{\mathrm{th,dem}}(t)}{\eta_{\mathrm{PHE}}}\,\Delta t,
+\label{eq:tess_output}
+\end{equation}
+where \(Q_{\mathrm{gen}}(t)\) is the sum of thermal energy provided by active heat sources during charging, and \(\eta_{\mathrm{PHE}}\) is the efficiency of the plate heat exchanger.  
+
+\begin{table}[H]
+\centering
+\caption{Thermal energy storage parameters}
+\label{tab:tess_parameters}
+\begin{tabular}{llll}
+\hline
+Quantity & Symbol & Value & Source \\
+\hline
+Usable capacity & \(E_{\mathrm{TESS,cap}}\) & \(22.5~\mathrm{kWh}\) & \cite{solarheateurope_tess} \\
+Self-discharge rate & \(\sigma_{\mathrm{TES}}\) & \(6\times10^{-4}\) & \cite{DANGELO2026121627} \\
+Heat exchanger efficiency & \(\eta_{\mathrm{PHE}}\) & \(0.9\) & \cite{DANGELO2026121627} \\
+Initial SOC & \(\mathrm{SOC}_{\mathrm{TESS,init}}\) & \(0.5\) & assumption \\
+Levelized cost of heat & \(\mathrm{LCOH}_{\mathrm{TESS}}\) & \(0.025~\mathrm{\text{\euro}/kWh_{d}}\) & \cite{costa_tess_finland} \\
+Lifecycle emissions & \(\mathrm{LEOH}_{\mathrm{TESS}}\) & \(0~\mathrm{kgCO2eq/kWh_{d}}\) & configuration \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Component Capacity Scaling}
+\label{subsec:component_scaling}
+
+Whereas demand is upscaled stochastically, as described in \ref{subsec:demand_upscaling}, generation and storage components are scaled deterministically by the number of households in the neighborhood. The number of PV panels, the BESS energy capacity $E_{\mathrm{BES}}$ and peak power $P_{\mathrm{BES,max}}$, and the TESS energy capacity $E_{\mathrm{TESS}}$ are each multiplied by $N$ prior to component instantiation. This reflects the assumption that the neighborhood is equipped with one system per household of each generation and storage type specified in the base configuration. No uncertainty is applied to component capacities, as installed size is a design parameter rather than a stochastic quantity.
+
+% General Energy Balance Equation etc. Renaming the chapter. describing that demand first gets covered by storage, then from local generation, then from grid; when demand is covered PV  electricity gets first stored in battery until SOCmax is reached and then sold to the grid.
+
+\section{Rule-Based Operational Strategy}
+\label{sec:rule_based_strategy}
+
+The current implementation applies a rule-based operational strategy to determine the use of generation and storage technologies for each hour in the representative seasonal days. This strategy defines a prioritization for both thermal and electrical energy balances and is encoded in the simulation core of the system.
+
+\subsection{Thermal Energy Prioritization}
+\label{subsec:thermal_prioritisation}
+
+For each hour \(t\) and season \(s\), the total thermal demand \(P_{\mathrm{th,dem}}(t)\) is first computed according to Equation \ref{eq:thermal_demand_definition}. Thermal supply then follows the priority:
+\begin{enumerate}
+    \item \textbf{Discharge of TESS}: If TESS is enabled, the controller first attempts to discharge thermal energy from storage. The discharged energy \(Q_{\mathrm{TES}}^{\mathrm{out}}(t)\) is limited by both the current state of charge and the heat exchanger efficiency, and it covers a portion of the demand according to Equation \ref{eq:tess_output}.
+    \item \textbf{Primary heat source}: The remaining thermal demand (if any) is then allocated to the primary heat source. The primary source is selected in the following order:
+    \begin{itemize}
+        \item If an air-source heat pump is enabled, it acts as the primary source.
+        \item Otherwise, if only an electric boiler is enabled, it supplies the remaining demand.
+        \item Otherwise, if only a gas boiler is enabled, it supplies the remaining demand.
+        \item If both gas and electric boilers are enabled, the present configuration assigns the remaining demand to the electric boiler, while the gas boiler can be enabled in alternative configurations.
+    \end{itemize}
+    The corresponding electrical demands of the selected heat pump or the electric boiler follow the component models in Sections \ref{subsec:heat_pumps} and \ref{subsec:electric_boiler}.
+    \item \textbf{Charging of TESS}: If TESS has available charge capacity, surplus output of the active heat sources can be used to increase the stored thermal energy. The charging command is constrained by the remaining capacity and the available thermal generation, and the state of charge evolves according to Equation \ref{eq:tess_energy_balance}.
+    \item \textbf{End-of-day SOC restoration}: At the end of each representative day, the TESS state of charge is adjusted to a predefined target (typically \(\mathrm{SOC}_{\mathrm{TESS,init}}\)) to ensure repeatable daily cycles. Any thermal deficit incurred by this correction is assigned back to the active heat source, while any surplus is discarded without revenue.
+\end{enumerate}
+This deterministic rule set ensures a well-defined mapping from thermal demand and component availability to hourly operation without requiring an optimization solver.
+
+\subsection{Electrical Energy Prioritization}
+\label{subsec:electrical_prioritisation}
+
+On the electrical side, the hourly total consumption is given by
+\begin{equation}
+E_{\mathrm{el,tot}}(t) = E_{\mathrm{el,dem}}(t)
++ E_{\mathrm{EB}}^{\mathrm{el}}(t)
++ E_{\mathrm{HP}}^{\mathrm{el}}(t),
+\label{eq:total_electric_consumption}
+\end{equation}
+where household demand \(E_{\mathrm{el,dem}}(t)\) is obtained from Section \ref{subsec:electric_demand}, and the electric boiler and heat pump demands follow Equations \ref{eq:electric_boiler_power} and \ref{eq:heat_pump_power}. The present rule-based controller then applies the following priority:
+\begin{enumerate}
+    \item \textbf{Use of PV generation}: If a PV system is enabled, its hourly output \(E_{\mathrm{PV}}(t)\) is first used to satisfy the total electrical consumption. Any PV energy remaining after direct self-consumption is considered surplus.
+    \item \textbf{Battery charging and discharging}:
+    \begin{itemize}
+        \item If PV generation exceeds the total consumption, the surplus is used to charge the BESS up to its power and energy limits, using the charging relation in Equation \ref{eq:bess_input_energy}. Any remaining surplus after charging is exported to the grid.
+        \item If PV generation is insufficient to cover total consumption, the BESS is discharged (if enabled) according to Equation \ref{eq:bess_output_energy}, again limited by power and energy constraints and discharge efficiency. Any remaining deficit after discharge is imported from the grid.
+        \item If PV generation exactly matches the total consumption, the BESS undergoes only self-discharge according to Equation \ref{eq:bess_energy_balance}.
+    \end{itemize}
+    \item \textbf{Grid import/export}: The residual balance after PV and BESS dispatch is assigned to grid import \(E_{\mathrm{UG}}^{\mathrm{imp}}(t)\) or grid export \(E_{\mathrm{UG}}^{\mathrm{exp}}(t)\), and costs and emissions are evaluated using Equations \ref{eq:grid_cost}--\ref{eq:grid_emissions}.
+    \item \textbf{End-of-day SOC restoration}: At the end of each representative day, the BESS state of charge is corrected to a target SOC, typically the initial value, in order to maintain cyclic consistency over the representative days. Any additional energy required for this correction is imported from the grid, while any surplus is exported, thereby closing the daily energy balance.
+\end{enumerate}
+This operational policy results in a clear and reproducible prioritization of PV self-consumption, storage usage, and grid interaction, which is well suited for scenario analysis and later integration with optimization routines.
+
+\section{Optimization}
+
+
+
+\chapter{Results and Discussion}
+The results section presents the seasonal simulation outcomes for the considered household configurations, followed by an optimization analysis of the selected system.
+
+\section{Seasonal simulation of each configuration}
+\label{sec:results_config}
+
+This subsection presents the annual simulation results for a single-family household. For each season, representative diagrams are shown to illustrate the operating behaviour of the different system configurations and to highlight their seasonal energy supply patterns.
+
+A comparison of the corresponding costs and \(\mathrm{CO_2}\)-equivalent emissions is then provided for the different configurations.
+
+
+% -----------------------------------------------------------------------
+% Configuration A – Grid + Gas Boiler
+% -----------------------------------------------------------------------
+\newpage
+\subsection*{Configuration A: Grid + Gas Boiler}
+Configuration~A represents the baseline scenario, consisting solely of a
+utility grid connection for electricity supply and a gas boiler for thermal
+demand coverage. The electrical and thermal energy demands are supplied
+independently: electricity is imported directly from the grid to satisfy the
+electrical load, while heat is generated through natural gas combustion.
+Since no local generation or energy storage is available, both the electrical
+and thermal supply curves exactly coincide with their respective demand curves
+at every time step. The schematic of this configuration is shown in
+Fig.~\ref{fig:schema_A}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth, angle=-90, trim=0 0 0 0, clip]{SchemaSystemB.pdf}
+  \caption{Schematic of Configuration~B: Grid + Gas Boiler.}
+  \label{fig:schema_B}
+\end{figure}
+\newpage
+
+\begin{figure}[H]
+  \centering
+  % Spring
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_spring_el.pdf}
+    \caption{Spring – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_spring_th.pdf}
+    \caption{Spring – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Summer
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_summer_el.pdf}
+    \caption{Summer – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_summer_th.pdf}
+    \caption{Summer – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Autumn
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_autumn_el.pdf}
+    \caption{Autumn – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_autumn_th.pdf}
+    \caption{Autumn – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Winter
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_winter_el.pdf}
+    \caption{Winter – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{A_grid_gb_winter_th.pdf}
+    \caption{Winter – Thermal}
+  \end{subfigure}
+
+  \caption{Configuration A (Grid + Gas Boiler): seasonal energy profiles.}
+  \label{fig:config_B}
+\end{figure}
+
+% -----------------------------------------------------------------------
+% Configuration B – Grid + Electric Boiler
+% -----------------------------------------------------------------------
+\newpage
+\subsection*{Configuration B: Grid + Electric Boiler}
+Configuration~B replaces the gas boiler with an electric boiler, thereby
+coupling the electrical and thermal energy supply. Electricity is imported
+from the utility grid to satisfy both the electrical load and the electric
+boiler, which converts electrical energy into heat. As in Configuration~A,
+no local generation or energy storage is present, so the system responds
+instantaneously to demand and the supply curves perfectly overlap the
+corresponding demand curves at every time step. The schematic of this
+configuration is shown in Fig.~\ref{fig:schema_B}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth, angle=-90, trim=0 0 0 0, clip]{SchemaSystemA.pdf}
+  \caption{Schematic of Configuration~A: Grid + Electric Boiler.}
+  \label{fig:schema_A}
+\end{figure}
+\newpage
+
+\begin{figure}[H]
+  \centering
+  % Spring
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_spring_el.pdf}
+    \caption{Spring – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_spring_th.pdf}
+    \caption{Spring – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Summer
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_summer_el.pdf}
+    \caption{Summer – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_summer_th.pdf}
+    \caption{Summer – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Autumn
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_autumn_el.pdf}
+    \caption{Autumn – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_autumn_th.pdf}
+    \caption{Autumn – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Winter
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_winter_el.pdf}
+    \caption{Winter – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{B_grid_eb_winter_th.pdf}
+    \caption{Winter – Thermal}
+  \end{subfigure}
+
+  \caption{Configuration B (Grid + Electric Boiler): seasonal energy profiles.}
+  \label{fig:config_A}
+\end{figure}
+
+% -----------------------------------------------------------------------
+% Configuration C – Grid + Electric Boiler + PV + BESS
+% -----------------------------------------------------------------------
+\newpage
+\subsection*{Configuration C: Grid + Electric Boiler + PV + BESS}
+Configuration~C extends the Configuration~B by adding rooftop photovoltaic
+generation and a battery energy storage system (BESS). The additional PV
+source introduces surplus electricity during daylight hours, which the BESS
+absorbs and redistributes to later time steps, visibly shifting and flattening
+the grid-import profile relative to Configurations~A and~B. Furthermore,
+whenever PV generation exceeds both the instantaneous electrical demand and
+the available BESS charging capacity, the surplus is sold back to the grid,
+introducing a negative net-import component that is absent in the simpler
+configurations. The thermal supply still tracks demand directly, as the
+electric boiler operates independently of the BESS state of charge.
+The schematic of this configuration is shown in Fig.~\ref{fig:schema_C}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth, angle=-90, trim=0 0 0 0, clip]{SchemaSystemC.pdf}
+  \caption{Schematic of Configuration~C: Grid + Electric Boiler + PV + BESS.}
+  \label{fig:schema_C}
+\end{figure}
+\newpage
+
+\begin{figure}[H]
+  \centering
+  % Spring
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_spring_el.pdf}
+    \caption{Spring – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_spring_th.pdf}
+    \caption{Spring – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Summer
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_summer_el.pdf}
+    \caption{Summer – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_summer_th.pdf}
+    \caption{Summer – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Autumn
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_autumn_el.pdf}
+    \caption{Autumn – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_autumn_th.pdf}
+    \caption{Autumn – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Winter
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_winter_el.pdf}
+    \caption{Winter – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_winter_th.pdf}
+    \caption{Winter – Thermal}
+  \end{subfigure}
+
+  \caption{Configuration C (Grid + Electric Boiler + PV + BESS): seasonal energy profiles.}
+  \label{fig:config_C}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_spring_soc}
+    \caption{Spring}
+    \label{fig:C_spring_soc}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_summer_soc}
+    \caption{Summer}
+    \label{fig:C_summer_soc}
+  \end{subfigure}
+
+  \vspace{1ex}
+
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_autumn_soc}
+    \caption{Autumn}
+    \label{fig:C_autumn_soc}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{C_grid_eb_pv_bess_winter_soc}
+    \caption{Winter}
+    \label{fig:C_winter_soc}
+  \end{subfigure}
+
+  \caption{BESS SOC of Configuration~C: Grid + Electric Boiler + PV + BESS.}
+  \label{fig:configC_soc}
+\end{figure}
+% -----------------------------------------------------------------------
+% Configuration D – Grid + ASHP + PV + BESS + TESS
+% -----------------------------------------------------------------------
+\newpage
+\subsection*{Configuration D: Grid + ASHP + PV + BESS + TESS}
+Configuration~D is the most complex scenario, replacing the electric boiler
+with an air-source heat pump (ASHP) and adding a thermal energy storage system
+(TESS) alongside the PV and BESS already present in Configuration~C. The ASHP
+introduces a seasonally varying coefficient of performance (COP), meaning that
+the same thermal output requires differing amounts of electrical input
+depending on the season. The TESS decouples heat generation from heat demand
+in time, allowing the ASHP to operate at thermally opportune moments and store
+excess heat for later use, which visibly alters the thermal profile shape
+compared to all preceding configurations. As in Configuration~C, PV surplus
+beyond local consumption and BESS capacity is exported to the grid. The
+combined effect of both storage systems and the COP-dependent heat pump
+produces the most distinctly shaped electrical and thermal profiles across all
+seasons. The schematic of this configuration is shown in Fig.~\ref{fig:schema_D}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.7\linewidth, angle=-90, trim=0 0 0 0, clip]{SchemaSystemD.pdf}
+  \caption{Schematic of Configuration~D: Grid + ASHP + PV + BESS + TESS.}
+  \label{fig:schema_D}
+\end{figure}
+\newpage
+
+\begin{figure}[H]
+  \centering
+  % Spring
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_spring_el.pdf}
+    \caption{Spring – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_spring_th.pdf}
+    \caption{Spring – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Summer
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_summer_el.pdf}
+    \caption{Summer – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_summer_th.pdf}
+    \caption{Summer – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Autumn
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_autumn_el.pdf}
+    \caption{Autumn – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_autumn_th.pdf}
+    \caption{Autumn – Thermal}
+  \end{subfigure}
+
+  \vspace{0.8em}
+
+  % Winter
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_winter_el.pdf}
+    \caption{Winter – Electrical}
+  \end{subfigure}\hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_winter_th.pdf}
+    \caption{Winter – Thermal}
+  \end{subfigure}
+
+  \caption{Configuration D (Grid + ASHP + PV + BESS + TESS): seasonal energy
+           profiles. 
+           }
+  \label{fig:config_D}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_spring_soc}
+    \caption{Spring}
+    \label{fig:D_spring_soc}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_summer_soc}
+    \caption{Summer}
+    \label{fig:D_summer_soc}
+  \end{subfigure}
+
+  \vspace{1ex}
+
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_autumn_soc}
+    \caption{Autumn}
+    \label{fig:D_autumn_soc}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{D_grid_ashp_pv_bess_tess_winter_soc}
+    \caption{Winter}
+    \label{fig:D_winter_soc}
+  \end{subfigure}
+
+  \caption{BESS and TESS SOC of Configuration~D: Grid + ASHP + PV + BESS + TESS.}
+  \label{fig:configD_soc}
+\end{figure}
+
+
+% ------------------------------------------------------------
+\subsection{System Configuration Comparison}
+% ------------------------------------------------------------
+
+%need to rewrite this paragraph!! Config A and B changed configuration. Values will change.
+
+
+Fig.~\ref{fig:system_comparison} provides a side-by-side comparison of the
+annual total cost and annual total CO$_{2}$ emissions across all four system
+configurations. Regarding costs, Configuration~B (Grid + Gas Boiler) achieves
+by far the lowest annual expenditure at 2{,}548\,\euro/year, owing to the
+relatively low cost of gas for thermal supply. Configurations~A and~C are
+comparably expensive at 5{,}579 and 5{,}400\,\euro/year respectively, indicating
+that the savings from PV generation and BESS in Configuration~C only partially
+offset the higher capital and storage costs relative to the simple electric
+boiler baseline. Configuration~D (Grid + ASHP + PV + BESS + TESS) achieves a
+meaningful cost reduction to 3{,}877\,\euro/year, reflecting the efficiency gains
+of the heat pump through its seasonal COP as well as the combined flexibility
+of both storage systems. Regarding emissions, Configurations~A and~B produce
+nearly identical annual totals of 370 and 367\,kg\,CO$_{2,eq}$/year
+respectively, confirming that substituting the electric boiler for a gas boiler
+has a negligible net effect on the overall emission balance under the assumed
+emission factors. The addition of PV and BESS in Configuration~C reduces
+emissions to 284\,kg\,CO$_{2,eq}$/year by displacing a portion of
+grid imports with local renewable generation. Configuration~D achieves the
+lowest emissions of all at only 109\,kg\,CO$_{2}$/year, a
+reduction of approximately 70\,\% relative to the baseline, driven by the
+combined effect of PV self-consumption, BESS and TESS flexibility, and the
+high COP of the ASHP reducing the electrical energy required to meet thermal
+demand.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{system_comparison.pdf}
+    \caption{Annual total cost and CO\textsubscript{2}-equivalent emissions for each
+             simulated system configuration.}
+    \label{fig:system_comparison}
+\end{figure}
+
+\section{Optimization}
+
+%Footnote about computer specs that ran the test.
+
+
+\chapter{Sustainability Analysis and Ethical Implications} 
+\section{Environmental Impact} 
+\section{Social Impact}
+\section{Ethical Implications}
+%This is a key chapter given this is a Master's in Sustainability — a discussion here is mandatory. Make sure to include the relevant SDGs (Sustainable Development Goals) connected to your work.
+\chapter{Economic Analysis}
+\section{Reusability and Break-even Analysis}
+%(the impact of this work in terms of cost reduction compared to current/existing systems)
+\section{Project Budget} 
+%(an estimate of the cost of your work as an engineer)
+\section{Economic Limitations}
+%(if any exist)
+
+\chapter{Conclusion and Outlook}
+
+
+\chapter{Outlook}
+
+
+
+\chapter*{Appendix}
+\addcontentsline{toc}{chapter}{Appendix}
+\pagenumbering{Roman}
+\setcounter{page}{7}
+%\chapter*{List of Tables}
+%\addtocontents{lot}{\protect\setcounter{tocdepth}{2}}  
+\listoftables
+
+%\chapter*{List of Figures}
+%\addtocontents{lof}{\protect\setcounter{tocdepth}{2}} 
+\listoffigures
+
+\chapter*{Nomenclature}
+\addcontentsline{toc}{chapter}{Nomenclature}
+\begin{table}[h]
+\centering
+\caption{List of Symbols}
+\begin{tabular}{l l l}
+\toprule
+\textbf{Symbol} & \textbf{Unit} & \textbf{Description} \\
+\midrule
+\textit{T} & \si{\celsius} & Temperature \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{List of Superscripts and Subscripts}
+\begin{tabular}{ll}
+\toprule
+\textbf{Superscript/Subscript} & \textbf{Description}\\
+\midrule
+HP & Heatpump\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{List of Acronyms}
+\begin{tabular}{ll}
+\toprule
+\textbf{Acronym} & \textbf{Description}\\
+\midrule
+\textit{COP} & Coefficient of Performance; Leistungszahl \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%\chapter*{Bibliography}
+\printbibliography
+\addcontentsline{toc}{chapter}{Bibliography}
+\setcounter{page}{10}
+
+%\chapter*{Repository}
+%\addcontentsline{toc}{chapter}{Repository}
+%\noindent The complete project, including all models, data, and implementation details, is available in the public repository at:.
+
+\end{document}
